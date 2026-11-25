@@ -1,0 +1,23 @@
+Copyright (c) 2026 Thomas Addamo. Tutti i diritti riservati.
+
+Il codice, il design, i testi e le icone di Tempora (index.html, legale.css,
+copyright.html, privacy.html, favicon.svg, apple-touch-icon.png, build/) sono
+pubblicati per trasparenza e non sono concessi in licenza. È vietato copiarli,
+modificarli, ridistribuirli o usarli senza autorizzazione scritta dell'autore
+(ciao@thoadd.com). Dettagli: https://tempora.thoadd.com/copyright.html
+
+ECCEZIONE — DATI CARTOGRAFICI (cartella data/)
+I file in data/ sono elaborazioni di fonti aperte e restano sotto le loro licenze:
+- Confini fino al 1880: historical-basemaps, André Ourednik, GPL-3.0
+  (testo completo in data/LICENSE-historical-basemaps.txt).
+- Confini dal 1886 al 2019: CShapes 2.0, ETH Zurigo, CC BY-NC-SA 4.0
+  (https://creativecommons.org/licenses/by-nc-sa/4.0/), solo uso non commerciale.
+- Coste e nomi: Natural Earth, pubblico dominio.
+
+---
+
+Copyright (c) 2026 Thomas Addamo. All rights reserved.
+
+Tempora's code, design, texts and icons are published for transparency and are
+not licensed. The files in data/ are derived from open sources and remain under
+their original licences (GPL-3.0, CC BY-NC-SA 4.0, public domain), as listed above.

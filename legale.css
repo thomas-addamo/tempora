@@ -1,0 +1,20 @@
+/* Pagine legali di Tempora: stessa carta e stessi caratteri della mappa (Fornace). */
+:root { --carta:#f7f1e6; --filo:#d9cbb4; --inchiostro:#2a211a; --tenue:#6b5a4c; --terracotta:#a84a28; color-scheme: light; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --carta:#1a1612; --filo:#3d332a; --inchiostro:#f2e9dc; --tenue:#b9a894; --terracotta:#e2906a; color-scheme: dark; } }
+:root[data-theme="dark"] { --carta:#1a1612; --filo:#3d332a; --inchiostro:#f2e9dc; --tenue:#b9a894; --terracotta:#e2906a; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--carta); color: var(--inchiostro); font: 17px/1.6 "Source Serif 4", Georgia, serif; }
+main { max-width: 680px; margin: 0 auto; padding: 48px 16px 80px; }
+.torna { font: 500 14px "DM Sans", system-ui, sans-serif; color: var(--tenue); text-decoration: none; }
+.torna:hover { color: var(--terracotta); }
+.marchio { margin-top: 32px; font: 600 13px "DM Sans", system-ui, sans-serif; letter-spacing: .08em; text-transform: uppercase; color: var(--terracotta); }
+h1 { margin: 8px 0 12px; font: 700 clamp(36px, 7vw, 56px)/1.05 "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif; letter-spacing: -.02em; }
+h1 em { font-style: italic; font-family: "Source Serif 4", Georgia, serif; font-weight: 400; color: var(--terracotta); }
+.intro { font-size: 20px; color: var(--inchiostro); }
+.agg { font: 13px "DM Sans", system-ui, sans-serif; color: var(--tenue); padding-bottom: 24px; border-bottom: 1px solid var(--filo); }
+h2 { margin: 36px 0 8px; font: 650 22px/1.25 "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif; }
+p, li { margin: 0 0 12px; }
+ul { padding-left: 20px; }
+a { color: var(--terracotta); }
+footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--filo); font: 13px "DM Sans", system-ui, sans-serif; color: var(--tenue); }
+footer a { color: inherit; }

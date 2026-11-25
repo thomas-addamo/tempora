@@ -167,6 +167,8 @@ button, input { font: inherit; color: inherit; }
 #caricamento { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: italic 16px var(--f-testo); color: var(--inchiostro-tenue); }
 #fonte { position: absolute; left: calc(env(safe-area-inset-left, 0px) + var(--s3)); bottom: calc(env(safe-area-inset-bottom, 0px) + 124px); max-width: calc(100vw - 420px); font-size: 11px; line-height: 15px; color: var(--inchiostro-tenue); }
 #fonte a { color: inherit; }
+#fonte span { display: block; }
+#fonte .legale { margin-top: 2px; }
 #apri-pannello { display: none; }
 
 @media (max-width: 1180px) {
@@ -183,7 +185,8 @@ button, input { font: inherit; color: inherit; }
   #pannello { top: auto; left: calc(env(safe-area-inset-left, 0px) + var(--s3)); right: calc(env(safe-area-inset-right, 0px) + var(--s3)); width: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); max-height: 52vh; z-index: 7; }
   #pannello[data-chiuso="true"] { display: none; }
   #apri-pannello { display: inline-flex; }
-  #fonte { display: none; }
+  #fonte { top: calc(env(safe-area-inset-top, 0px) + var(--s3)); right: calc(env(safe-area-inset-right, 0px) + var(--s3)); left: auto; bottom: auto; max-width: 150px; text-align: right; font-size: 10px; line-height: 14px; }
+  #fonte .crediti { display: none; }
   #tempo { height: 96px; }
   #racconto { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 140px); }
 }
@@ -226,7 +229,7 @@ button, input { font: inherit; color: inherit; }
 
   <aside id="pannello" class="lastra" aria-live="polite" data-chiuso="true"></aside>
 
-  <div id="fonte">Confini: <a href="https://github.com/aourednik/historical-basemaps" target="_blank" rel="noopener">historical-basemaps</a> (A. Ourednik, GPL-3.0) fino al 1880 · <a href="https://icr.ethz.ch/data/cshapes/" target="_blank" rel="noopener">CShapes 2.0</a> (ETH Zurigo, CC BY-NC-SA 4.0) dal 1886 · coste <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a></div>
+  <div id="fonte"><span class="crediti">Confini: <a href="https://github.com/aourednik/historical-basemaps" target="_blank" rel="noopener">historical-basemaps</a> (A. Ourednik, GPL-3.0) fino al 1880 · <a href="https://icr.ethz.ch/data/cshapes/" target="_blank" rel="noopener">CShapes 2.0</a> (ETH Zurigo, CC BY-NC-SA 4.0) dal 1886 · coste <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a></span><span class="legale">© 2026 <a href="https://thoadd.com" target="_blank" rel="noopener">Thomas Addamo</a> · <a href="copyright.html">Copyright e licenze</a> · <a href="privacy.html">Privacy</a></span></div>
 
   <section id="tempo" class="lastra" aria-label="Linea del tempo">
     <div class="comandi">

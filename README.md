@@ -30,3 +30,7 @@ python3 -m http.server 5178
 - Fino al 1880: [historical-basemaps](https://github.com/aourednik/historical-basemaps) di André Ourednik, GPL-3.0. I confini interni antichi sono approssimati: ogni entità riporta la precisione indicata dalla fonte (1–3).
 - Dal 1886 al 2019: [CShapes 2.0](https://icr.ethz.ch/data/cshapes/), ETH Zurigo, CC BY-NC-SA 4.0 (solo uso non commerciale).
 - Coste e nomi italiani: [Natural Earth](https://www.naturalearthdata.com/), pubblico dominio.
+
+## Copyright
+
+© 2026 Thomas Addamo, tutti i diritti riservati su codice, design e testi; i dati in `data/` restano sotto le licenze delle fonti. Vedi [LICENSE](LICENSE), [copyright.html](copyright.html) e [privacy.html](privacy.html).

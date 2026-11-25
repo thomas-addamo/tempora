@@ -1,0 +1,15 @@
+# I crawler per l'addestramento di modelli AI sono esclusi (riserva TDM, vedi /copyright.html).
+User-agent: GPTBot
+User-agent: ChatGPT-User
+User-agent: ClaudeBot
+User-agent: anthropic-ai
+User-agent: Google-Extended
+User-agent: CCBot
+User-agent: PerplexityBot
+User-agent: Bytespider
+User-agent: Applebot-Extended
+User-agent: meta-externalagent
+Disallow: /
+
+User-agent: *
+Allow: /
