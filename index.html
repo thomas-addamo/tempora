@@ -1,0 +1,1184 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Tempora</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;1,8..60,400&family=DM+Sans:opsz,wght@9..40,400..700&display=swap">
+<style>
+/* Layout: la mappa occupa tutto lo schermo; sopra, tre lastre di carta (testata, pannello, linea del tempo). Design system: Fornace. */
+:root {
+  --carta: #f7f1e6;
+  --carta-scura: #ece2d0;
+  --filo: #d9cbb4;
+  --inchiostro: #2a211a;
+  --inchiostro-tenue: #6b5a4c;
+  --terracotta: #a84a28;
+  --terracotta-chiara: #f0d6c6;
+  --oliva: #56622f;
+  --ocra: #b8862a;
+  --mare: #dfe0d4;
+  --mare-filo: #c9c6b3;
+  --terra: #ece4d2;
+  --lastra: rgba(247, 241, 230, 0.94);
+  --f-display: "Bricolage Grotesque", "Helvetica Neue", Arial, sans-serif;
+  --f-testo: "Source Serif 4", Georgia, serif;
+  --f-ui: "DM Sans", system-ui, sans-serif;
+  --r-sm: 2px; --r-md: 6px; --r-lg: 12px;
+  --s1: 4px; --s2: 8px; --s3: 16px; --s4: 24px; --s5: 40px;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --carta: #1a1612; --carta-scura: #241e18; --filo: #3d332a; --inchiostro: #f2e9dc; --inchiostro-tenue: #b9a894;
+    --terracotta: #e2906a; --terracotta-chiara: #4a2a1c; --oliva: #b3bf7f; --ocra: #d9a94c;
+    --mare: #121518; --mare-filo: #232a2f; --terra: #2b251f; --lastra: rgba(26, 22, 18, 0.93);
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --carta: #1a1612; --carta-scura: #241e18; --filo: #3d332a; --inchiostro: #f2e9dc; --inchiostro-tenue: #b9a894;
+  --terracotta: #e2906a; --terracotta-chiara: #4a2a1c; --oliva: #b3bf7f; --ocra: #d9a94c;
+  --mare: #121518; --mare-filo: #232a2f; --terra: #2b251f; --lastra: rgba(26, 22, 18, 0.93);
+  color-scheme: dark;
+}
+html, body { height: 100%; margin: 0; }
+[hidden] { display: none !important; }
+body { background: var(--carta); color: var(--inchiostro); font-family: var(--f-ui); overflow: hidden; }
+* { box-sizing: border-box; }
+button, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 2px; }
+
+#app { position: fixed; inset: 0; }
+#map { position: absolute; inset: 0; width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+#map.dragging { cursor: grabbing; }
+.lastra { background: var(--lastra); border: 1px solid var(--filo); border-radius: var(--r-lg); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+.etichetta { font: 600 11px/14px var(--f-ui); letter-spacing: 0.1em; text-transform: uppercase; color: var(--inchiostro-tenue); }
+
+/* Testata */
+#testata { position: absolute; top: calc(env(safe-area-inset-top, 0px) + var(--s3)); left: calc(env(safe-area-inset-left, 0px) + var(--s3)); padding: var(--s3) var(--s4) var(--s3); min-width: 280px; display: grid; gap: var(--s1); }
+.marchio { display: flex; align-items: baseline; gap: var(--s2); }
+.marchio b { font: 800 19px/1 var(--f-display); letter-spacing: -0.02em; }
+.marchio b i { font-style: normal; color: var(--terracotta); }
+.marchio span { font-size: 12px; color: var(--inchiostro-tenue); }
+.anno { display: flex; align-items: baseline; gap: 10px; margin-top: var(--s2); }
+.anno strong { font: 800 64px/0.9 var(--f-display); letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
+.anno em { font: 600 16px var(--f-display); font-style: normal; color: var(--terracotta); }
+.era { font: italic 400 16px/22px var(--f-testo); color: var(--inchiostro-tenue); }
+.mappa-di { margin-top: var(--s1); }
+
+/* Strumenti */
+#strumenti { position: absolute; top: calc(env(safe-area-inset-top, 0px) + var(--s3)); right: calc(env(safe-area-inset-right, 0px) + var(--s3) + 340px + var(--s3)); display: flex; gap: var(--s2); align-items: flex-start; flex-wrap: wrap; justify-content: flex-end; max-width: calc(100vw - 720px); }
+.cerca { position: relative; width: 260px; }
+.cerca input { width: 100%; height: 40px; padding: 0 var(--s3) 0 36px; border: 1px solid var(--filo); border-radius: 999px; background: var(--lastra); font-size: 14px; }
+.cerca input::placeholder { color: var(--inchiostro-tenue); }
+.cerca svg { position: absolute; left: 13px; top: 12px; width: 16px; height: 16px; stroke: var(--inchiostro-tenue); fill: none; stroke-width: 1.6; }
+#risultati { position: absolute; top: 46px; left: 0; right: 0; padding: var(--s1); display: grid; z-index: 5; max-height: 360px; overflow: auto; }
+#risultati button { all: unset; cursor: pointer; padding: 8px 12px; border-radius: var(--r-md); display: grid; gap: 2px; }
+#risultati button:hover, #risultati button.attivo { background: var(--carta-scura); }
+#risultati b { font-weight: 600; font-size: 14px; }
+#risultati small { font-size: 12px; color: var(--inchiostro-tenue); font-variant-numeric: tabular-nums; }
+.segmenti { display: inline-flex; padding: 3px; gap: 2px; border-radius: 999px; height: 40px; align-items: center; }
+.segmenti button { border: 0; background: none; height: 32px; padding: 0 12px; border-radius: 999px; font-size: 13px; font-weight: 600; cursor: pointer; color: var(--inchiostro-tenue); }
+.segmenti button[aria-pressed="true"] { background: var(--inchiostro); color: var(--carta); }
+.segmenti button:hover:not([aria-pressed="true"]) { color: var(--inchiostro); }
+.bottone { height: 40px; padding: 0 var(--s3); border-radius: 999px; border: 1px solid var(--filo); background: var(--lastra); font-weight: 600; font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: var(--s2); }
+.bottone:hover { border-color: var(--inchiostro-tenue); }
+.bottone.pieno { background: var(--terracotta); border-color: var(--terracotta); color: #fff8f2; }
+:root[data-theme="dark"] .bottone.pieno { color: #1a1612; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .bottone.pieno { color: #1a1612; } }
+
+/* Pannello */
+#pannello { position: absolute; top: calc(env(safe-area-inset-top, 0px) + var(--s3)); right: calc(env(safe-area-inset-right, 0px) + var(--s3)); width: 340px; bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); overflow: auto; padding: var(--s4); display: flex; flex-direction: column; gap: var(--s3); }
+#pannello h2 { font: 800 30px/1 var(--f-display); letter-spacing: -0.02em; margin: 0; text-wrap: balance; }
+#pannello h3 { font: 700 15px/20px var(--f-display); margin: 0; }
+#pannello p { font: 400 15px/23px var(--f-testo); margin: 0; }
+.originale { font: italic 14px var(--f-testo); color: var(--inchiostro-tenue); margin-top: 6px; }
+.dati { display: grid; grid-template-columns: 1fr 1fr; gap: var(--s3) var(--s3); padding-block: var(--s3); border-block: 1px solid var(--filo); }
+.dati div { display: grid; gap: 2px; min-width: 0; }
+.dati dd { margin: 0; font: 700 20px/1.1 var(--f-display); font-variant-numeric: tabular-nums; letter-spacing: -0.01em; overflow-wrap: anywhere; }
+.dati dd small { font: 500 12px var(--f-ui); color: var(--inchiostro-tenue); letter-spacing: 0; }
+.dati dt { order: -1; }
+.precisione { display: inline-flex; gap: 3px; vertical-align: middle; }
+.precisione i { width: 8px; height: 8px; border-radius: 50%; border: 1px solid var(--inchiostro-tenue); }
+.precisione i.on { background: var(--inchiostro); border-color: var(--inchiostro); }
+.grafico svg { width: 100%; height: 150px; display: block; overflow: visible; }
+.grafico .asse text { font: 500 10px var(--f-ui); fill: var(--inchiostro-tenue); font-variant-numeric: tabular-nums; }
+.grafico .asse line, .grafico .griglia line { stroke: var(--filo); }
+.didascalia { font: 400 12px/17px var(--f-ui); color: var(--inchiostro-tenue); }
+.link { color: var(--terracotta); font-weight: 600; font-size: 13px; text-decoration: none; }
+.link:hover { text-decoration: underline; }
+.indietro { all: unset; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--inchiostro-tenue); display: inline-flex; gap: 6px; align-items: center; }
+.indietro:hover { color: var(--inchiostro); }
+.classifica { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.classifica button { all: unset; cursor: pointer; display: grid; grid-template-columns: 22px 1fr auto; gap: var(--s2); align-items: center; width: 100%; padding: 7px 8px; border-radius: var(--r-md); box-sizing: border-box; }
+.classifica button:hover { background: var(--carta-scura); }
+.classifica .n { font: 700 12px var(--f-ui); color: var(--inchiostro-tenue); font-variant-numeric: tabular-nums; }
+.classifica .nome { font-size: 14px; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.classifica .barra { grid-column: 2 / 4; height: 3px; border-radius: 2px; background: var(--carta-scura); overflow: hidden; }
+.classifica .barra i { display: block; height: 100%; }
+.classifica .km { font: 500 12px var(--f-ui); color: var(--inchiostro-tenue); font-variant-numeric: tabular-nums; }
+.legenda { display: grid; gap: 6px; font-size: 13px; }
+.legenda span { display: flex; align-items: center; gap: var(--s2); }
+.legenda i { width: 18px; height: 12px; border-radius: 2px; border: 1px solid var(--filo); flex: none; }
+.sovrano { all: unset; cursor: pointer; color: var(--terracotta); font-weight: 600; }
+.sovrano:hover { text-decoration: underline; }
+.assente { padding: var(--s3); border-radius: var(--r-md); background: var(--terracotta-chiara); font: 400 14px/20px var(--f-testo); }
+
+/* Linea del tempo */
+#tempo { position: absolute; left: calc(env(safe-area-inset-left, 0px) + var(--s3)); right: calc(env(safe-area-inset-right, 0px) + var(--s3)); bottom: calc(env(safe-area-inset-bottom, 0px) + var(--s3)); height: 100px; display: flex; align-items: stretch; gap: var(--s3); padding: var(--s2) var(--s3) var(--s2) var(--s2); }
+.comandi { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; flex: none; }
+#play { width: 52px; height: 52px; border-radius: 50%; border: 0; background: var(--inchiostro); color: var(--carta); cursor: pointer; display: grid; place-items: center; }
+#play svg { width: 20px; height: 20px; fill: currentColor; }
+#velocita { border: 0; background: none; font: 700 11px var(--f-ui); color: var(--inchiostro-tenue); cursor: pointer; font-variant-numeric: tabular-nums; padding: 2px 6px; border-radius: 999px; }
+#velocita:hover { color: var(--inchiostro); background: var(--carta-scura); }
+#linea { flex: 1; min-width: 0; position: relative; }
+#linea svg { width: 100%; height: 100%; display: block; overflow: visible; touch-action: none; cursor: pointer; }
+#linea .era-banda { fill: var(--carta-scura); }
+#linea .era-banda.alt { fill: var(--filo); opacity: .45; }
+#linea .era-nome { font: italic 400 12px var(--f-testo); fill: var(--inchiostro-tenue); }
+#linea .tacca text { font: 600 10px var(--f-ui); fill: var(--inchiostro-tenue); font-variant-numeric: tabular-nums; }
+#linea .tacca line { stroke: var(--inchiostro-tenue); opacity: .5; }
+#linea .istantanea { fill: var(--inchiostro-tenue); }
+#linea .istantanea.corrente { fill: var(--terracotta); }
+#linea .evento { cursor: pointer; }
+#linea .evento path { fill: var(--ocra); stroke: var(--carta); stroke-width: 1; }
+#linea .evento:hover path { fill: var(--terracotta); }
+#linea .cursore line { stroke: var(--terracotta); stroke-width: 2; }
+#linea .cursore rect { fill: var(--terracotta); }
+#linea .cursore text { font: 700 11px var(--f-ui); fill: #fff8f2; font-variant-numeric: tabular-nums; }
+#linea .scia { fill: var(--terracotta); opacity: .12; }
+#linea:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 4px; border-radius: var(--r-md); }
+
+/* Tooltip e didascalie */
+#suggerimento { position: absolute; pointer-events: none; padding: 8px 12px; display: grid; gap: 2px; max-width: 260px; z-index: 8; border-radius: var(--r-md); transform: translate(14px, 14px); }
+#suggerimento b { font: 700 14px/18px var(--f-display); }
+#suggerimento small { font-size: 12px; color: var(--inchiostro-tenue); font-variant-numeric: tabular-nums; }
+#racconto { position: absolute; left: 50%; bottom: calc(env(safe-area-inset-bottom, 0px) + 132px); transform: translateX(-50%); width: min(560px, calc(100vw - 32px)); padding: var(--s4); display: grid; gap: var(--s2); z-index: 6; animation: sale .5s cubic-bezier(.2,.8,.2,1); }
+#racconto h3 { font: 800 26px/1.05 var(--f-display); margin: 0; letter-spacing: -0.02em; text-wrap: balance; }
+#racconto p { font: 400 16px/25px var(--f-testo); margin: 0; }
+#racconto .piede { display: flex; align-items: center; justify-content: space-between; gap: var(--s2); margin-top: var(--s2); }
+#racconto .avanzamento { height: 2px; background: var(--filo); border-radius: 2px; overflow: hidden; }
+#racconto .avanzamento i { display: block; height: 100%; width: 0; background: var(--terracotta); }
+@keyframes sale { from { opacity: 0; transform: translate(-50%, 12px); } }
+#caricamento { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: italic 16px var(--f-testo); color: var(--inchiostro-tenue); }
+#fonte { position: absolute; left: calc(env(safe-area-inset-left, 0px) + var(--s3)); bottom: calc(env(safe-area-inset-bottom, 0px) + 124px); max-width: calc(100vw - 420px); font-size: 11px; line-height: 15px; color: var(--inchiostro-tenue); }
+#fonte a { color: inherit; }
+#apri-pannello { display: none; }
+
+@media (max-width: 1180px) {
+  #strumenti { right: calc(env(safe-area-inset-right, 0px) + var(--s3) + 340px + var(--s3)); max-width: calc(100vw - 340px - 48px - 300px); }
+  .cerca { width: 200px; }
+}
+@media (max-width: 860px) {
+  #testata { min-width: 0; padding: 12px 16px; right: auto; }
+  .anno strong { font-size: 44px; }
+  .marchio span, .mappa-di { display: none; }
+  #strumenti { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); right: calc(env(safe-area-inset-right, 0px) + var(--s3)); left: calc(env(safe-area-inset-left, 0px) + var(--s3)); max-width: none; justify-content: flex-start; }
+  .cerca { width: 100%; order: -1; }
+  #risultati { top: auto; bottom: 46px; }
+  #pannello { top: auto; left: calc(env(safe-area-inset-left, 0px) + var(--s3)); right: calc(env(safe-area-inset-right, 0px) + var(--s3)); width: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); max-height: 52vh; z-index: 7; }
+  #pannello[data-chiuso="true"] { display: none; }
+  #apri-pannello { display: inline-flex; }
+  #fonte { display: none; }
+  #tempo { height: 96px; }
+  #racconto { bottom: auto; top: calc(env(safe-area-inset-top, 0px) + 140px); }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation-duration: 1ms !important; transition-duration: 1ms !important; } }
+</style>
+
+<div id="app">
+  <canvas id="map" aria-label="Mappa del mondo con i confini politici dell'anno selezionato"></canvas>
+  <div id="caricamento">Sto preparando la carta…</div>
+
+  <header id="testata" class="lastra">
+    <div class="marchio"><b>Tempora<i>.</i></b><span>atlante storico del mondo</span></div>
+    <div class="anno" aria-live="polite"><strong id="anno-num">1279</strong><em id="anno-era">d.C.</em></div>
+    <div class="era" id="era-nome">Basso Medioevo</div>
+    <div class="etichetta mappa-di" id="mappa-di">Confini del 1279</div>
+  </header>
+
+  <div id="strumenti">
+    <div class="cerca">
+      <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="7" cy="7" r="5"/><path d="M11 11l4 4"/></svg>
+      <input id="cerca" type="search" placeholder="Cerca uno stato, un impero, un popolo" autocomplete="off" aria-label="Cerca un'entità storica" aria-controls="risultati">
+      <div id="risultati" class="lastra" role="listbox" hidden></div>
+    </div>
+    <div class="segmenti lastra" role="group" aria-label="Proiezione">
+      <button id="p-piano" aria-pressed="true">Piano</button>
+      <button id="p-globo" aria-pressed="false">Globo</button>
+    </div>
+    <div class="segmenti lastra" role="group" aria-label="Colori della mappa">
+      <button id="c-sovrani" aria-pressed="true" title="Uno stesso colore per un impero e i suoi territori dipendenti">Imperi</button>
+      <button id="c-stati" aria-pressed="false" title="Un colore per ogni entità">Stati</button>
+    </div>
+    <button class="bottone" id="b-etichette" aria-pressed="true">Nomi</button>
+    <button class="bottone" id="b-tema" aria-label="Cambia tema">Notte</button>
+    <button class="bottone pieno" id="b-visita">
+      <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 1l9 5-9 5z" fill="currentColor"/></svg>
+      Visita guidata
+    </button>
+    <button class="bottone" id="apri-pannello">Dettagli</button>
+  </div>
+
+  <aside id="pannello" class="lastra" aria-live="polite" data-chiuso="true"></aside>
+
+  <div id="fonte">Confini: <a href="https://github.com/aourednik/historical-basemaps" target="_blank" rel="noopener">historical-basemaps</a> (A. Ourednik, GPL-3.0) fino al 1880 · <a href="https://icr.ethz.ch/data/cshapes/" target="_blank" rel="noopener">CShapes 2.0</a> (ETH Zurigo, CC BY-NC-SA 4.0) dal 1886 · coste <a href="https://www.naturalearthdata.com/" target="_blank" rel="noopener">Natural Earth</a></div>
+
+  <section id="tempo" class="lastra" aria-label="Linea del tempo">
+    <div class="comandi">
+      <button id="play" aria-label="Avvia lo scorrere del tempo"><svg viewBox="0 0 20 20"><path d="M5 3l12 7-12 7z"/></svg></button>
+      <button id="velocita" aria-label="Velocità di riproduzione">1×</button>
+    </div>
+    <div id="linea" tabindex="0" role="slider" aria-label="Anno" aria-valuemin="-3000" aria-valuemax="2010" aria-valuenow="1279"></div>
+  </section>
+
+  <div id="suggerimento" class="lastra" hidden></div>
+  <div id="racconto" class="lastra" hidden></div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/7.9.0/d3.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/topojson-client@3.1.0/dist/topojson-client.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/flubber@0.4.2/build/flubber.min.js"></script>
+<script>
+"use strict";
+/* ───────────────────────── Contenuti ───────────────────────── */
+const IT = {
+  "Roman Empire":"Impero romano","Roman Republic":"Repubblica romana","Rome":"Roma","Western Roman Empire":"Impero romano d'Occidente","Eastern Roman Empire":"Impero romano d'Oriente","Byzantine Empire":"Impero bizantino",
+  "Rome (Constantinus)":"Roma (Costanzo Cloro)","Rome (Maximian)":"Roma (Massimiano)","Rome (Galerius)":"Roma (Galerio)","Rome (Diocletianus)":"Roma (Diocleziano)",
+  "Mongol Empire":"Impero mongolo","Mongols":"Mongoli","Great Khanate":"Gran Khanato (Yuan)","Chagatai Khanate":"Khanato Chagatai","Khanate of the Golden Horde":"Orda d'Oro","Golden Horde":"Orda d'Oro","Ilkhanate":"Ilkhanato","White Horde":"Orda Bianca","Blue Horde":"Orda Blu",
+  "Ottoman Empire":"Impero ottomano","Holy Roman Empire":"Sacro Romano Impero","Papal States":"Stato Pontificio","Venice":"Repubblica di Venezia","Kingdom of the Two Sicilies":"Regno delle Due Sicilie","Naples":"Regno di Napoli","Sicily":"Regno di Sicilia","Emirate of Sicily":"Emirato di Sicilia","Italy":"Italia","Kingdom of Italy":"Regno d'Italia",
+  "Achaemenid Empire":"Impero achemenide","Empire of Alexander":"Impero di Alessandro","Seleucid Kingdom":"Regno seleucide","Ptolemaic Kingdom":"Regno tolemaico","Carthaginian Empire":"Impero cartaginese","Carthage":"Cartagine","Macedon and Hellenic League":"Macedonia e Lega ellenica",
+  "Parthian Empire":"Impero partico","Sasanian Empire":"Impero sasanide","Abbasid Caliphate":"Califfato abbaside","Fatimid Caliphate":"Califfato fatimide","Umayyad Caliphate":"Califfato omayyade","Franks":"Franchi","Frankish Kingdom":"Regno dei Franchi","Carolingian Empire":"Impero carolingio",
+  "France":"Francia","Spain":"Spagna","Portugal":"Portogallo","England":"Inghilterra","United Kingdom":"Regno Unito","Germany":"Germania","Austria":"Austria","Russian Empire":"Impero russo","USSR":"Unione Sovietica","Russia":"Russia","Tsardom of Muscovy":"Zarato di Russia","Grand Duchy of Moscow":"Granducato di Mosca",
+  "Qing Empire":"Impero Qing","Manchu Empire":"Impero mancese","Ming Empire":"Impero Ming","Ming Chinese Empire":"Impero Ming","Han Empire":"Impero Han","Tang Empire":"Impero Tang","Song Empire":"Impero Song","Sui Empire":"Impero Sui","Jin Empire":"Impero Jin","China":"Cina","Chinese warlords":"Signori della guerra cinesi","Chinese Warlords":"Signori della guerra cinesi",
+  "Mughal Empire":"Impero moghul","Mauryan Empire":"Impero Maurya","Gupta Empire":"Impero Gupta","British Raj":"India britannica","Timurid Empire":"Impero timuride","Timurid Emirates":"Emirati timuridi","Safavid Empire":"Impero safavide","Persia":"Persia","Egypt":"Egitto","Sultanate of Delhi":"Sultanato di Delhi","Maratha Confederacy":"Confederazione maratha",
+  "Viceroyalty of New Spain":"Vicereame della Nuova Spagna","Viceroyalty of Peru":"Vicereame del Perù","Viceroyalty of Brazil":"Vicereame del Brasile","Viceroyalty of New Granada":"Vicereame della Nuova Granada","Viceroyalty of the Río de la Plata":"Vicereame del Río de la Plata","Kingdom of Brazil":"Regno del Brasile",
+  "United States":"Stati Uniti","United States of America":"Stati Uniti d'America","Brazil":"Brasile","Mexico":"Messico","Inca Empire":"Impero inca","Aztec Empire":"Impero azteco","Kushan Empire":"Impero kushan","Scythians":"Sciti","Seljuk Empire":"Impero selgiuchide","Tibetan Empire":"Impero tibetano","Tufan Empire":"Impero tibetano (Tufan)",
+  "Antarctica":"Antartide","Greenland":"Groenlandia","Japan":"Giappone","Poland":"Polonia","Hungary":"Ungheria","Sweden":"Svezia","Norway":"Norvegia","Denmark":"Danimarca","Kalmar Union":"Unione di Kalmar","Denmark-Norway":"Danimarca-Norvegia","Saudi Arabia":"Arabia Saudita","Arabia":"Arabia",
+  "Algeria (France)":"Algeria (Francia)","French West Africa":"Africa occidentale francese","French Equatorial Africa":"Africa equatoriale francese","Belgian Congo":"Congo belga","Anglo-Egyptian Sudan":"Sudan anglo-egiziano","Italian Somaliland":"Somalia italiana","Eritrea (Italy)":"Eritrea (Italia)","Ethiopia (Italy)":"Etiopia (Italia)","Union of South Africa":"Unione Sudafricana",
+  "Kazakhstan":"Kazakistan","Bantu peoples":"Popoli bantu","Bantu":"Popoli bantu","Germany (Soviet)":"Germania (zona sovietica)","Cyprus":"Cipro","Sardinia":"Sardegna","Corsica":"Corsica","Croatia":"Croazia","Georgia":"Georgia","Armenia":"Armenia","Bulgar Khanate":"Khanato bulgaro","Ghana":"Impero del Ghana","Mali":"Impero del Mali",
+  "Chimú Empire":"Impero chimú","Chola Empire":"Impero chola","Khazars":"Cazari","Slavonic tribes":"Tribù slave","Hallstatt culture":"Cultura di Hallstatt","Berbers":"Berberi","Berber Tribes":"Tribù berbere","Arabs":"Arabi","Bedouins":"Beduini","Xiongnu":"Xiongnu","Göktürks":"Göktürk","Uyghurs":"Uiguri","Rupert's Land":"Terra di Rupert",
+  "Ancient Egypt":"Antico Egitto","Egypt (Ptolemaic)":"Egitto tolemaico","Hittites":"Ittiti","Assyria":"Assiria","Babylonia":"Babilonia","Sumer":"Sumer","Akkad":"Accad","Minoans":"Minoici","Mycenaean Greece":"Grecia micenea","Etruscans":"Etruschi","Greek city-states":"Città-stato greche","Celts":"Celti","Germans":"Germani","Huns":"Unni","Visigoths":"Visigoti","Ostrogoths":"Ostrogoti","Vandals":"Vandali","Lombards":"Longobardi",
+  "Kingdom of Lombards":"Regno longobardo","Lombard Kingdom":"Regno longobardo","Kievan Rus":"Rus' di Kiev","Golden Horde Khanate":"Orda d'Oro","Kingdom of England":"Regno d'Inghilterra","Kingdom of France":"Regno di Francia","Castile":"Castiglia","Aragon":"Aragona","Portugal (Kingdom)":"Regno di Portogallo","Sweden-Finland":"Svezia-Finlandia","Prussia":"Prussia","Austrian Empire":"Impero austriaco","Austro-Hungarian Empire":"Impero austro-ungarico","German Empire":"Impero tedesco","Spanish Empire":"Impero spagnolo","Portuguese Empire":"Impero portoghese","British Empire":"Impero britannico","Japanese Empire":"Impero giapponese","Imperial Japan (Fujiwara)":"Giappone imperiale (Fujiwara)"
+};
+const LINEE = {
+  "Roma": ["Rome","Roman Republic","Roman Empire","Western Roman Empire","Rome (Constantinus)","Rome (Maximian)","Rome (Galerius)","Rome (Diocletianus)"],
+  "Bisanzio": ["Eastern Roman Empire","Byzantine Empire"],
+  "Persia": ["Achaemenid Empire","Parthian Empire","Sasanian Empire","Safavid Empire","Persia","Iran"],
+  "Cina imperiale": ["Han Empire","Han","Jin Empire","Sui Empire","Tang Empire","Song Empire","Ming Empire","Ming Chinese Empire","Qing Empire","Manchu Empire","China"],
+  "Mosca e la Russia": ["Grand Duchy of Moscow","Tsardom of Muscovy","Russian Empire","USSR","Russia"],
+  "Franchi e Francia": ["Franks","Frankish Kingdom","Carolingian Empire","France"],
+  "Mongoli": ["Mongols","Mongol Empire","Great Khanate"],
+  "Italia unita": ["Kingdom of Italy","Italy>1800"],
+  "Germania": ["Germany","German Federal Republic"],
+  "Turchia ottomana": ["Ottoman Empire","Turkey"],
+  "Stati Uniti": ["United States","United States of America"]
+};
+const ERE = [
+  [-3000, -1200, "Età del bronzo"], [-1200, -500, "Età del ferro"], [-500, 476, "Età classica"],
+  [476, 1000, "Alto Medioevo"], [1000, 1492, "Basso Medioevo"], [1492, 1789, "Età moderna"],
+  [1789, 1914, "Ottocento"], [1914, 2010, "Novecento"]
+];
+// [anno, titolo, testo, [lon, lat, zoom], nel tour]
+const EVENTI = [
+  [-3000, "Le prime città", "Lungo il Tigri, l'Eufrate e il Nilo nascono le prime città-stato e i primi regni. Quasi tutto il resto del mondo è abitato da cacciatori, raccoglitori e pastori.", [38, 29, 3.2], true],
+  [-1754, "Il codice di Hammurabi", "Il re di Babilonia fa incidere su una stele di basalto 282 leggi: è una delle prime raccolte scritte di diritto.", [44, 32, 4]],
+  [-753, "La fondazione di Roma", "Secondo la tradizione Romolo fonda Roma sul Palatino il 21 aprile.", [12.5, 41.9, 6]],
+  [-500, "L'impero persiano", "Sotto Dario I l'impero achemenide va dall'Egeo fino all'Indo: è lo stato più esteso che il mondo abbia mai visto.", [50, 32, 2.6], true],
+  [-323, "La morte di Alessandro", "In dodici anni Alessandro conquista l'impero persiano e arriva in India. Muore a Babilonia a 32 anni e i suoi generali si dividono le conquiste.", [48, 32, 2.4], true],
+  [-221, "La Cina unificata", "Il re di Qin sconfigge gli altri regni combattenti e prende il titolo di Primo Imperatore.", [110, 34, 3]],
+  [-200, "Roma contro Cartagine", "Dopo Zama, nel 202 a.C., Roma è la prima potenza del Mediterraneo occidentale. Cartagine perde la Spagna e la flotta.", [12, 38, 3.8], true],
+  [-44, "Le idi di marzo", "Giulio Cesare viene ucciso in Senato. La guerra civile che segue porta Ottaviano al potere.", [12.5, 41.9, 6]],
+  [-27, "Augusto", "Ottaviano riceve il titolo di Augusto: la repubblica diventa impero.", [14, 41, 4]],
+  [117, "Roma al suo apice", "Con Traiano l'impero romano raggiunge la massima estensione: dalla Britannia all'Egitto, dalla Spagna alla Mesopotamia.", [16, 40, 2.8], true],
+  [313, "L'editto di Milano", "Costantino e Licinio garantiscono la libertà di culto ai cristiani.", [9.2, 45.5, 5]],
+  [476, "La fine dell'Occidente", "Odoacre depone Romolo Augustolo, l'ultimo imperatore d'Occidente. L'impero d'Oriente, con capitale Costantinopoli, durerà altri mille anni.", [14, 43, 3.2], true],
+  [622, "L'Egira", "Maometto lascia La Mecca per Medina: inizia il calendario islamico. In un secolo il califfato arriverà dalla Spagna all'Indo.", [40, 24, 4]],
+  [800, "Carlo Magno imperatore", "La notte di Natale dell'800 papa Leone III incorona Carlo Magno. L'impero carolingio unisce gran parte dell'Europa occidentale.", [8, 47, 3.6], true],
+  [1054, "Lo scisma d'Oriente", "La Chiesa di Roma e quella di Costantinopoli si separano.", [22, 42, 3.5]],
+  [1206, "Gengis Khan", "Temujin riunisce le tribù della steppa e prende il nome di Gengis Khan.", [105, 47, 3]],
+  [1279, "L'impero mongolo", "I successori di Gengis Khan governano il più grande impero terrestre contiguo della storia. Nel 1279 Kublai Khan completa la conquista della Cina dei Song.", [85, 45, 1.7], true],
+  [1347, "La peste nera", "L'epidemia arriva in Europa dai porti del Mar Nero e uccide circa un terzo della popolazione.", [15, 45, 3]],
+  [1453, "La caduta di Costantinopoli", "Maometto II conquista la città: finisce l'impero bizantino.", [29, 41, 5]],
+  [1492, "Un nuovo mondo", "Colombo raggiunge i Caraibi. In Europa cade Granada, e gli Ottomani, padroni di Costantinopoli dal 1453, avanzano nei Balcani.", [-35, 25, 1.5], true],
+  [1517, "La Riforma", "Lutero diffonde le sue 95 tesi: l'Europa cristiana si divide.", [12, 51, 5]],
+  [1600, "Gli imperi coloniali", "Spagna e Portogallo si dividono le Americhe: i vicereami della Nuova Spagna e del Perù governano un continente da Madrid.", [-65, -5, 1.4], true],
+  [1648, "La pace di Vestfalia", "Finisce la guerra dei Trent'anni e nasce l'idea moderna di stato sovrano.", [8, 51, 5]],
+  [1776, "L'indipendenza americana", "Tredici colonie britanniche si dichiarano indipendenti.", [-76, 40, 4]],
+  [1789, "La Rivoluzione francese", "La presa della Bastiglia apre l'età delle rivoluzioni.", [2.3, 48.8, 5]],
+  [1815, "Il Congresso di Vienna", "Dopo Napoleone le potenze europee ridisegnano i confini del continente. L'Italia è ancora divisa in più stati.", [12, 48, 3.4], true],
+  [1861, "L'Unità d'Italia", "Vittorio Emanuele II è proclamato re d'Italia a Torino.", [12, 42, 5.5]],
+  [1914, "Il mondo nel 1914", "Alla vigilia della Grande Guerra quasi tutta l'Africa e buona parte dell'Asia sono controllate dalle potenze europee.", [20, 15, 1.3], true],
+  [1945, "Dopo la guerra", "La Germania è divisa in zone di occupazione. L'Europa si spacca tra blocco occidentale e blocco sovietico.", [15, 50, 3], true],
+  [1992, "La fine dell'URSS", "L'Unione Sovietica si dissolve in quindici stati indipendenti.", [60, 55, 1.8], true]
+];
+const RE_CULTURE = /hunter|gatherer|nomad|tribes|tribal|pastoral|cultures?\b|peoples|farmers|herders|fishers|bantu|khoisan|aboriginal|hunters|settlers|foragers|semites|dravidians|aryans|papuans|inuit|thule|dorset|tungus|siberians|proto-|touareg|tuareg|athabaskan|^minor |bedouins|berbers|slavonic|arabs$|tupis|mandes|amerindian|andronovo|karasuk|yuezhi|cimerians|celts|germans$/i;
+
+/* ───────────────────────── Utilità ───────────────────────── */
+const $ = s => document.querySelector(s);
+const nomeIt = n => IT[n] || (INDICE && INDICE.it && INDICE.it[n]) || n;
+const fmtAnno = y => y < 0 ? `${-y} a.C.` : `${y} d.C.`;
+const fmtKm = a => a >= 1e6 ? `${(a / 1e6).toLocaleString("it-IT", { maximumFractionDigits: 2 })} mln` : Math.round(a).toLocaleString("it-IT");
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const riduciMoto = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const eraDi = y => (ERE.find(e => y >= e[0] && y < e[1]) || ERE[ERE.length - 1])[2];
+const hash = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return Math.abs(h); };
+const isCultura = n => RE_CULTURE.test(n);
+function salva(k, v) { try { localStorage.setItem("tempora:" + k, v); } catch (e) {} }
+function leggi(k) { try { return localStorage.getItem("tempora:" + k); } catch (e) { return null; } }
+
+/* Scala del tempo non lineare: le epoche recenti, più ricche di mappe, hanno più spazio */
+const T_DOM = [-3000, -1000, -500, 1, 500, 1000, 1500, 1800, 1900, 2010];
+const T_RNG = [0, .1, .17, .27, .37, .48, .62, .78, .88, 1];
+const tScala = d3.scaleLinear().domain(T_DOM).range(T_RNG).clamp(true);
+
+/* ───────────────────────── Stato ───────────────────────── */
+const S = {
+  anno: 1279, istantanea: null, modo: "s", proj: "piano", nomi: true,
+  sel: null, hover: null, play: false, vel: 1, anim: null, tour: null, pannelloAperto: false
+};
+let INDICE = null, ANNI = [];
+const cache = new Map();   // anno -> istantanea
+const inCorso = new Map(); // anno -> promise
+
+/* ───────────────────────── Canvas e proiezioni ───────────────────────── */
+const canvas = $("#map"), ctx = canvas.getContext("2d");
+const hitCtx = document.createElement("canvas").getContext("2d");
+let W = 0, H = 0, DPR = 1;
+const SFERA = { type: "Sphere" };
+const GRATICOLA = d3.geoGraticule10();
+let base = d3.geoEqualEarth();
+const globo = d3.geoOrthographic().clipAngle(90).precision(0.4);
+let vista = d3.zoomIdentity, globoK = 1, rot = [-30, -25], ultimaT = d3.zoomIdentity;
+let percorsoSfera = null, percorsoGraticola = null;
+let colori = {};
+
+function leggiColori() {
+  const cs = getComputedStyle(document.documentElement);
+  const v = n => cs.getPropertyValue(n).trim();
+  const scuro = cs.colorScheme && cs.colorScheme.includes("dark") || v("--carta").toLowerCase() === "#1a1612";
+  colori = {
+    scuro, carta: v("--carta"), mare: v("--mare"), mareFilo: v("--mare-filo"), terra: v("--terra"), filo: v("--filo"),
+    inchiostro: v("--inchiostro"), tenue: v("--inchiostro-tenue"), terracotta: v("--terracotta"),
+    tinte: scuro
+      ? ["#7a4a36", "#5d6440", "#7d6633", "#3f5866", "#6e4a52", "#466350", "#574d6b", "#6b5a43", "#36605d"]
+      : ["#dba78c", "#b9c08e", "#e0c584", "#a3b7c1", "#d4a3a3", "#a3c1aa", "#b8adc8", "#dcc8a6", "#94b6b2"]
+  };
+  colori.tratteggio = creaTratteggio();
+}
+function creaTratteggio() {
+  const c = document.createElement("canvas"); c.width = c.height = 8;
+  const g = c.getContext("2d");
+  g.fillStyle = colori.terra; g.fillRect(0, 0, 8, 8);
+  g.strokeStyle = colori.scuro ? "rgba(255,240,220,.07)" : "rgba(90,70,50,.13)"; g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, 8); g.lineTo(8, 0); g.moveTo(-2, 2); g.lineTo(2, -2); g.moveTo(6, 10); g.lineTo(10, 6); g.stroke();
+  return ctx.createPattern(c, "repeat");
+}
+
+function ridimensiona() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = canvas.clientWidth; H = canvas.clientHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+  const stretto = W < 860;
+  const padT = stretto ? 120 : 40, padB = stretto ? 200 : 140, padL = stretto ? 8 : 24, padR = stretto ? 8 : 380;
+  base = d3.geoEqualEarth().fitExtent([[padL, padT], [W - padR, H - padB]], SFERA);
+  const gR = Math.min(W - padL - padR, H - padT - padB) / 2;
+  globo.scale(gR).translate([padL + (W - padL - padR) / 2, padT + (H - padT - padB) / 2]);
+  globo._r = gR;
+  percorsoSfera = new Path2D(); d3.geoPath(base, percorsoSfera)(SFERA);
+  percorsoGraticola = new Path2D(); d3.geoPath(base, percorsoGraticola)(GRATICOLA);
+  preparaTerra();
+  for (const s of cache.values()) preparaPiano(s);
+  zoom.translateExtent([[-W * 0.5, -H * 0.5], [W * 1.5, H * 1.5]]);
+  disegna();
+  if (linea) linea.ridisegna();
+}
+
+/* ───────────────────────── Dati ───────────────────────── */
+/* Ogni carta ha due livelli: leggero (vista del mondo) e alta definizione (caricato con lo zoom).
+   La costa precisa è un livello a parte (Natural Earth) che fa da maschera a tutti i territori. */
+const TERRA = { g50: null, g10: null, p50: null, p10: null, hdP: null };
+function costruisciLivello(t, dest) {
+  const obj = t.objects.t;
+  const fc = topojson.feature(t, obj);
+  dest.feats = fc.features.filter(f => f.geometry && f.properties.n).map(f => {
+    const p = f.properties;
+    return { n: p.n, s: p.s || p.n, p: p.p || 1, a: p.a || 0, l: p.l, geo: f, cult: isCultura(p.n) };
+  });
+  dest.byN = new Map(dest.feats.map(f => [f.n, f]));
+  dest.mesh = {
+    s: topojson.mesh(t, obj, (a, b) => a !== b && a.properties.s !== b.properties.s),
+    sInterni: topojson.mesh(t, obj, (a, b) => a !== b && a.properties.s === b.properties.s && a.properties.n !== b.properties.n),
+    n: topojson.mesh(t, obj, (a, b) => a !== b && a.properties.n !== b.properties.n)
+  };
+  return dest;
+}
+function caricaAnno(y) {
+  if (cache.has(y)) return Promise.resolve(cache.get(y));
+  if (inCorso.has(y)) return inCorso.get(y);
+  const p = fetch(`data/${y}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(t => {
+    const s = costruisciLivello(t, { anno: y, hd: null, hdP: null });
+    preparaPiano(s);
+    cache.set(y, s); inCorso.delete(y);
+    if (usaHD()) caricaHD(s);
+    return s;
+  });
+  inCorso.set(y, p);
+  return p;
+}
+function caricaHD(s) {
+  if (!s || s.hdP) return;
+  s.hdP = fetch(`data/${s.anno}-hd.json`).then(r => r.json()).then(t => {
+    s.hd = costruisciLivello(t, {});
+    preparaLivello(s.hd, false);
+    disegna();
+  }).catch(() => { s.hdP = null; });
+  if (!TERRA.hdP) TERRA.hdP = fetch("data/terra-10.json").then(r => r.json()).then(t => {
+    TERRA.g10 = topojson.merge(t, Object.values(t.objects)[0].geometries);
+    preparaTerra(); disegna();
+  }).catch(() => { TERRA.hdP = null; });
+}
+const usaHD = () => S.proj === "piano" ? vista.k >= 3 : globoK >= 2.6;
+const livello = s => (usaHD() && s.hd) ? s.hd : s;
+function preparaTerra() {
+  for (const k of ["50", "10"]) {
+    const g = TERRA["g" + k]; if (!g) continue;
+    const p = new Path2D(); d3.geoPath(base, p)(g); TERRA["p" + k] = p;
+  }
+}
+function preparaLivello(liv, conEtichette) {
+  const gp = d3.geoPath(base);
+  for (const f of liv.feats) {
+    f.path = new Path2D(); d3.geoPath(base, f.path)(f.geo);
+    if (conEtichette) { f.pxA = gp.area(f.geo); f.anello = null; f.lp = f.l ? base(f.l) : null; }
+  }
+  liv.p2 = {};
+  for (const k in liv.mesh) { const p = new Path2D(); d3.geoPath(base, p)(liv.mesh[k]); liv.p2[k] = p; }
+}
+function preparaPiano(s) {
+  preparaLivello(s, true);
+  if (s.hd) preparaLivello(s.hd, false);
+  s.etichette = null;
+}
+const istantaneaPer = y => { let r = ANNI[0]; for (const a of ANNI) if (a <= y) r = a; return r; };
+
+/* ───────────────────────── Colori delle entità ───────────────────────── */
+function riempimento(f) {
+  if (!f.n) return colori.tratteggio;
+  const chiave = S.modo === "s" ? f.s : f.n;
+  const tab = S.modo === "s" ? INDICE.colorsS : INDICE.colorsN;
+  const i = chiave in tab ? tab[chiave] : hash(chiave) % 9;
+  return colori.tinte[i];
+}
+const evidenziato = f => S.sel && (f.n === S.sel || f.s === S.sel);
+
+/* ───────────────────────── Disegno ───────────────────────── */
+let richiesto = false;
+function disegna() { if (!richiesto) { richiesto = true; requestAnimationFrame(frame); } }
+function frame(now) {
+  richiesto = false;
+  if (!S.istantanea || !colori.tinte) return;
+  let e = 1;
+  if (S.anim) {
+    e = clamp((now - S.anim.t0) / S.anim.dur, 0, 1);
+    e = d3.easeCubicInOut(e);
+    if (e >= 1) S.anim = null; else disegna();
+  }
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.fillStyle = colori.carta; ctx.fillRect(0, 0, W, H);
+  if (S.proj === "piano") disegnaPiano(e); else disegnaGlobo(e);
+}
+
+function disegnaPiano(e) {
+  const k = vista.k, nuova = S.istantanea, vecchia = S.anim ? S.anim.da : null;
+  const LN = livello(nuova), LV = vecchia ? livello(vecchia) : null;
+  const terra = (k >= 3 && TERRA.p10) ? TERRA.p10 : TERRA.p50;
+  ctx.setTransform(DPR * k, 0, 0, DPR * k, DPR * vista.x, DPR * vista.y);
+  ctx.fillStyle = colori.mare; ctx.fill(percorsoSfera);
+  ctx.strokeStyle = colori.mareFilo; ctx.lineWidth = 0.6 / k; ctx.stroke(percorsoGraticola);
+  colori.tratteggio.setTransform(new DOMMatrix().scale(1 / k));
+  // terra vera, tratteggiata dove nessuno la governa
+  ctx.fillStyle = colori.tratteggio; ctx.fill(terra);
+  ctx.save(); ctx.clip(terra);
+
+  const morph = S.anim ? S.anim.morph : null;
+  if (LV) {
+    ctx.globalAlpha = 1 - e;
+    for (const f of LV.feats) {
+      if (morph.has(f.n) || (LN.byN.has(f.n) && S.anim.uguali.has(f.n))) continue;
+      ctx.fillStyle = riempimento(f); ctx.fill(f.path);
+    }
+    ctx.globalAlpha = 1;
+  }
+  for (const f of LN.feats) {
+    if (morph && morph.has(f.n)) continue;
+    const entra = vecchia && !S.anim.uguali.has(f.n);
+    ctx.globalAlpha = (entra ? e : 1) * (f.cult ? 0.55 : 1);
+    ctx.fillStyle = riempimento(f); ctx.fill(f.path);
+  }
+  ctx.globalAlpha = 1;
+  if (morph) {
+    for (const [, m] of morph) {
+      const pts = m.fn(e);
+      ctx.beginPath(); ctx.moveTo(pts[0][0], pts[0][1]);
+      for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i][0], pts[i][1]);
+      ctx.closePath();
+      ctx.globalAlpha = m.f.cult ? 0.55 : 1;
+      ctx.fillStyle = riempimento(m.f); ctx.fill();
+      ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = 0.9 / k; ctx.globalAlpha = 0.55; ctx.stroke();
+      ctx.globalAlpha = e * 0.9; ctx.fillStyle = riempimento(m.f); ctx.fill(m.f.path);
+      if (m.v) { ctx.globalAlpha = (1 - e) * 0.9; ctx.fillStyle = riempimento(m.v); ctx.fill(m.v.path); }
+      ctx.globalAlpha = 1;
+    }
+  }
+  // confini interni (la costa è disegnata a parte)
+  const larg = clamp(0.55 + Math.log2(k) * 0.18, 0.55, 1.4);
+  const disegnaConfini = (s, a) => {
+    ctx.strokeStyle = colori.inchiostro; ctx.lineJoin = "round";
+    if (S.modo === "s") {
+      ctx.globalAlpha = a * 0.3; ctx.lineWidth = larg * 0.6 / k; ctx.setLineDash([2.5 / k, 2 / k]); ctx.stroke(s.p2.sInterni); ctx.setLineDash([]);
+      ctx.globalAlpha = a * 0.8; ctx.lineWidth = larg / k; ctx.stroke(s.p2.s);
+    } else {
+      ctx.globalAlpha = a * 0.7; ctx.lineWidth = larg * 0.85 / k; ctx.stroke(s.p2.n);
+    }
+    ctx.globalAlpha = 1;
+  };
+  if (LV) disegnaConfini(LV, (1 - e) * 0.8);
+  disegnaConfini(LN, vecchia ? e : 1);
+
+  if (S.sel && !S.anim) {
+    const sel = LN.feats.filter(evidenziato);
+    ctx.fillStyle = colori.carta; ctx.globalAlpha = colori.scuro ? 0.55 : 0.5; ctx.fill(percorsoSfera); ctx.globalAlpha = 1;
+    for (const f of sel) { ctx.fillStyle = riempimento(f); ctx.fill(f.path); }
+    ctx.strokeStyle = colori.terracotta; ctx.lineWidth = 2.4 / k;
+    for (const f of sel) ctx.stroke(f.path);
+  }
+  if (S.hover && !S.anim) { const h = LN.byN.get(S.hover.n) || S.hover; ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = 1.8 / k; ctx.stroke(h.path); }
+  ctx.restore();
+  // costa precisa
+  ctx.strokeStyle = colori.tenue; ctx.lineWidth = 0.7 / k; ctx.lineJoin = "round"; ctx.stroke(terra);
+  ctx.strokeStyle = colori.tenue; ctx.lineWidth = 1 / k; ctx.stroke(percorsoSfera);
+
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  if (S.nomi) disegnaEtichette(nuova, vecchia ? e : 1, f => f.lp ? [f.lp[0] * k + vista.x, f.lp[1] * k + vista.y] : null, k * k);
+}
+
+function disegnaGlobo(e) {
+  globo.scale(globo._r * globoK).rotate(rot);
+  const gp = d3.geoPath(globo, ctx);
+  const terra = (globoK >= 2.6 && TERRA.g10) ? TERRA.g10 : TERRA.g50;
+  ctx.beginPath(); gp(SFERA); ctx.fillStyle = colori.mare; ctx.fill();
+  ctx.beginPath(); gp(GRATICOLA); ctx.strokeStyle = colori.mareFilo; ctx.lineWidth = 0.6; ctx.stroke();
+  colori.tratteggio.setTransform(new DOMMatrix());
+  ctx.beginPath(); gp(terra); ctx.fillStyle = colori.tratteggio; ctx.fill();
+  ctx.save(); ctx.clip();
+  const strato = (s, alpha) => {
+    for (const f of s.feats) {
+      ctx.beginPath(); gp(f.geo);
+      ctx.globalAlpha = alpha * (f.cult ? 0.55 : 1);
+      ctx.fillStyle = riempimento(f); ctx.fill();
+    }
+    ctx.beginPath(); gp(S.modo === "s" ? s.mesh.s : s.mesh.n); ctx.strokeStyle = colori.inchiostro; ctx.globalAlpha = alpha * 0.75; ctx.lineWidth = 0.8; ctx.stroke();
+    ctx.globalAlpha = 1;
+  };
+  const nuova = S.istantanea, LN = livello(nuova);
+  if (S.anim) { strato(livello(S.anim.da), 1); strato(LN, e); } else strato(LN, 1);
+  if (S.sel && !S.anim) {
+    ctx.strokeStyle = colori.terracotta; ctx.lineWidth = 2.4;
+    for (const f of LN.feats) if (evidenziato(f)) { ctx.beginPath(); gp(f.geo); ctx.stroke(); }
+  }
+  if (S.hover && !S.anim) { const h = LN.byN.get(S.hover.n) || S.hover; ctx.beginPath(); gp(h.geo); ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = 1.8; ctx.stroke(); }
+  ctx.restore();
+  ctx.beginPath(); gp(terra); ctx.strokeStyle = colori.tenue; ctx.lineWidth = 0.7; ctx.stroke();
+  ctx.beginPath(); gp(SFERA); ctx.strokeStyle = colori.tenue; ctx.lineWidth = 1; ctx.stroke();
+  const centro = [-rot[0], -rot[1]];
+  const k2 = Math.pow(globo._r * globoK / base.scale(), 2);
+  if (S.nomi) disegnaEtichette(nuova, S.anim ? e : 1, f => (f.l && d3.geoDistance(f.l, centro) < 1.2) ? globo(f.l) : null, k2);
+}
+
+/* Etichette: dalle entità più grandi alle più piccole, senza sovrapposizioni */
+function candidatiEtichette(s) {
+  if (s.etichette && s.etichette.modo === S.modo) return s.etichette.lista;
+  const gruppi = new Map();
+  for (const f of s.feats) {
+    if (!f.n || !f.lp) continue;
+    const key = S.modo === "s" && !f.cult ? f.s : f.n;
+    const g = gruppi.get(key) || { nome: key, pxA: 0, top: null, cult: f.cult };
+    g.pxA += f.pxA;
+    if (!g.top || f.pxA > g.top.pxA || f.n === key && f.pxA > g.top.pxA * 0.4) g.top = f;
+    gruppi.set(key, g);
+  }
+  const lista = [...gruppi.values()].sort((a, b) => b.pxA - a.pxA);
+  s.etichette = { modo: S.modo, lista };
+  return lista;
+}
+function disegnaEtichette(s, alpha, proietta, k2) {
+  const lista = candidatiEtichette(s), occupati = [];
+  ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.lineJoin = "round";
+  let disegnate = 0;
+  for (const g of lista) {
+    const lato = Math.sqrt(g.pxA * k2);
+    if (lato < 34) break;
+    const pt = proietta(g.top); if (!pt) continue;
+    if (pt[0] < -50 || pt[1] < -20 || pt[0] > W + 50 || pt[1] > H + 20) continue;
+    const testo = g.cult ? nomeIt(g.nome) : nomeIt(g.nome).toLocaleUpperCase("it-IT");
+    let size = clamp(lato * 0.11, 10, 28);
+    ctx.font = g.cult ? `italic 400 ${size + 1}px "Source Serif 4", Georgia, serif` : `600 ${size}px "DM Sans", system-ui, sans-serif`;
+    if ("letterSpacing" in ctx) ctx.letterSpacing = g.cult ? "0px" : `${(size * 0.12).toFixed(1)}px`;
+    let w = ctx.measureText(testo).width;
+    if (w > lato * 1.5) {
+      size = size * (lato * 1.5) / w; if (size < 9) continue;
+      ctx.font = g.cult ? `italic 400 ${size + 1}px "Source Serif 4", Georgia, serif` : `600 ${size}px "DM Sans", system-ui, sans-serif`;
+      if ("letterSpacing" in ctx) ctx.letterSpacing = g.cult ? "0px" : `${(size * 0.12).toFixed(1)}px`;
+      w = ctx.measureText(testo).width;
+    }
+    const r = [pt[0] - w / 2 - 3, pt[1] - size / 2 - 2, pt[0] + w / 2 + 3, pt[1] + size / 2 + 2];
+    if (occupati.some(o => r[0] < o[2] && r[2] > o[0] && r[1] < o[3] && r[3] > o[1])) continue;
+    occupati.push(r);
+    const sel = S.sel && (g.nome === S.sel || g.top.n === S.sel || g.top.s === S.sel);
+    ctx.globalAlpha = alpha * (S.sel && !sel ? 0.45 : g.cult ? 0.8 : 1);
+    ctx.strokeStyle = colori.carta; ctx.lineWidth = 3; ctx.strokeText(testo, pt[0], pt[1]);
+    ctx.fillStyle = sel ? colori.terracotta : g.cult ? colori.tenue : colori.inchiostro;
+    ctx.fillText(testo, pt[0], pt[1]);
+    if (++disegnate > 140) break;
+  }
+  ctx.globalAlpha = 1;
+  if ("letterSpacing" in ctx) ctx.letterSpacing = "0px";
+}
+
+/* ───────────────────────── Transizioni con morphing ───────────────────────── */
+function anelloMaggiore(f) {
+  if (f.anello) return f.anello;
+  const anelli = []; let cur = null;
+  d3.geoPath(base, { moveTo(x, y) { cur = [[x, y]]; anelli.push(cur); }, lineTo(x, y) { cur.push([x, y]); }, closePath() {}, arc() {} })(f.geo);
+  let best = null, bestA = 0;
+  for (const r of anelli) { const a = Math.abs(d3.polygonArea(r)); if (a > bestA) { bestA = a; best = r; } }
+  if (best && best.length > 180) { const passo = Math.ceil(best.length / 180); best = best.filter((_, i) => i % passo === 0); }
+  f.anello = best && best.length > 3 ? best : null;
+  return f.anello;
+}
+function avviaTransizione(da, a) {
+  const dur = riduciMoto ? 0 : (S.play ? clamp(700 / S.vel, 260, 900) : 1100);
+  if (!da || dur === 0) { S.anim = null; return; }
+  const uguali = new Set(), cand = [];
+  for (const f of a.feats) {
+    if (!f.n) continue;
+    const v = da.byN.get(f.n);
+    if (!v) continue;
+    const diff = Math.abs(f.a - v.a) / Math.max(f.a, v.a, 1);
+    if (diff < 0.004) uguali.add(f.n);
+    else if (S.proj === "piano" && f.pxA > 20 && v.pxA > 20) cand.push({ f, v, peso: Math.abs(f.pxA - v.pxA) });
+    else uguali.add(f.n);
+  }
+  cand.sort((x, y) => y.peso - x.peso);
+  const morph = new Map();
+  for (const c of cand.slice(0, S.play ? 24 : 48)) {
+    const ra = anelloMaggiore(c.v), rb = anelloMaggiore(c.f);
+    if (!ra || !rb) { continue; }
+    try { morph.set(c.f.n, { fn: flubber.interpolate(ra, rb, { string: false, maxSegmentLength: 8 }), f: c.f, v: c.v }); } catch (err) {}
+  }
+  S.anim = { da, morph, uguali, t0: performance.now(), dur };
+}
+
+/* ───────────────────────── Cambio d'anno ───────────────────────── */
+let richiestaAnno = 0;
+async function impostaAnno(y, { animare = true } = {}) {
+  S.anno = Math.round(clamp(y, -3000, 2010));
+  if (S.anno === 0) S.anno = 1;
+  aggiornaTestata();
+  if (linea) linea.cursore();
+  const snap = istantaneaPer(S.anno);
+  if (S.istantanea && S.istantanea.anno === snap) return;
+  const id = ++richiestaAnno;
+  const s = await caricaAnno(snap);
+  if (id !== richiestaAnno) return;
+  const prima = S.istantanea;
+  if (prima === s) return;
+  // termina un'animazione in corso partendo dallo stato già raggiunto
+  if (animare && prima) avviaTransizione(prima, s); else S.anim = null;
+  S.istantanea = s; S.hover = null;
+  $("#caricamento").hidden = true;
+  aggiornaTestata(); aggiornaPannello(); disegna();
+  if (linea) linea.cursore();
+  aggiornaHash();
+  // precarico le carte vicine
+  const i = ANNI.indexOf(snap);
+  [ANNI[i + 1], ANNI[i - 1], ANNI[i + 2]].forEach(a => a != null && caricaAnno(a).catch(() => {}));
+}
+function aggiornaTestata() {
+  const y = S.anno;
+  $("#anno-num").textContent = Math.abs(y);
+  $("#anno-era").textContent = y < 0 ? "a.C." : "d.C.";
+  $("#era-nome").textContent = eraDi(y);
+  const snap = S.istantanea ? S.istantanea.anno : istantaneaPer(y);
+  $("#mappa-di").textContent = snap === y ? `Carta del ${fmtAnno(snap)}` : `Carta più recente: ${fmtAnno(snap)}`;
+  $("#linea").setAttribute("aria-valuenow", y);
+  $("#linea").setAttribute("aria-valuetext", fmtAnno(y));
+}
+let hashTimer = 0;
+function aggiornaHash() {
+  clearTimeout(hashTimer);
+  hashTimer = setTimeout(() => {
+    const h = "#anno-" + (S.anno < 0 ? "a" + (-S.anno) : S.anno);
+    try { history.replaceState(null, "", h); } catch (e) {}
+  }, 400);
+}
+function annoDaHash() {
+  const m = location.hash.match(/^#anno-(a?)(\d{1,4})$/);
+  return m ? (m[1] ? -Number(m[2]) : Number(m[2])) : null;
+}
+
+/* ───────────────────────── Interazione con la mappa ───────────────────────── */
+const zoom = d3.zoom().scaleExtent([1, 40]).on("start", () => canvas.classList.add("dragging")).on("end", () => canvas.classList.remove("dragging")).on("zoom", ev => {
+  const t = ev.transform;
+  if (S.proj === "piano") vista = t;
+  else {
+    const se = ev.sourceEvent;
+    if (se && se.type !== "wheel" && se.type !== "dblclick") {
+      const dx = t.x - ultimaT.x, dy = t.y - ultimaT.y;
+      rot = [rot[0] + dx * 0.32 / globoK, clamp(rot[1] - dy * 0.32 / globoK, -85, 85)];
+    }
+    globoK = t.k;
+  }
+  ultimaT = t;
+  if (usaHD() && S.istantanea) caricaHD(S.istantanea);
+  nascondiSuggerimento();
+  disegna();
+});
+d3.select(canvas).call(zoom).on("dblclick.zoom", null);
+
+function entitaIn(px, py) {
+  const s = S.istantanea; if (!s) return null;
+  if (S.proj === "piano") {
+    const x = (px - vista.x) / vista.k, y = (py - vista.y) / vista.k;
+    if (TERRA.p50 && !hitCtx.isPointInPath(TERRA.p50, x, y)) return null;
+    for (let i = s.feats.length - 1; i >= 0; i--) { const f = s.feats[i]; if (f.n && hitCtx.isPointInPath(f.path, x, y)) return f; }
+  } else {
+    const ll = globo.invert([px, py]); if (!ll || d3.geoDistance(ll, [-rot[0], -rot[1]]) > Math.PI / 2) return null;
+    if (TERRA.g50 && !d3.geoContains(TERRA.g50, ll)) return null;
+    for (let i = s.feats.length - 1; i >= 0; i--) { const f = s.feats[i]; if (f.n && d3.geoContains(f.geo, ll)) return f; }
+  }
+  return null;
+}
+const sugg = $("#suggerimento");
+function nascondiSuggerimento() { sugg.hidden = true; }
+let ultimoMove = 0;
+canvas.addEventListener("pointermove", ev => {
+  if (ev.buttons || ev.pointerType === "touch") return;
+  const now = performance.now(); if (now - ultimoMove < 30) return; ultimoMove = now;
+  const r = canvas.getBoundingClientRect();
+  const f = entitaIn(ev.clientX - r.left, ev.clientY - r.top);
+  if (f !== S.hover) { S.hover = f; disegna(); }
+  if (f) {
+    const sovrano = f.s && f.s !== f.n ? `<small>sotto ${esc(nomeIt(f.s))}</small>` : "";
+    sugg.innerHTML = `<b>${esc(nomeIt(f.n))}</b>${sovrano}<small>${fmtKm(f.a)} km²</small>`;
+    sugg.style.left = (ev.clientX) + "px"; sugg.style.top = (ev.clientY) + "px";
+    sugg.hidden = false; canvas.style.cursor = "pointer";
+  } else { nascondiSuggerimento(); canvas.style.cursor = ""; }
+});
+canvas.addEventListener("pointerleave", () => { S.hover = null; nascondiSuggerimento(); disegna(); });
+let giu = null;
+canvas.addEventListener("pointerdown", ev => { giu = [ev.clientX, ev.clientY]; });
+canvas.addEventListener("click", ev => {
+  if (giu && Math.hypot(ev.clientX - giu[0], ev.clientY - giu[1]) > 5) return;
+  const r = canvas.getBoundingClientRect();
+  const f = entitaIn(ev.clientX - r.left, ev.clientY - r.top);
+  seleziona(f ? f.n : null);
+});
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+
+function volaA(lon, lat, k, dur = 1500) {
+  if (riduciMoto) dur = 0;
+  if (S.proj === "piano") {
+    const p = base([lon, lat]); if (!p) return;
+    const stretto = W < 860;
+    const cx = stretto ? W / 2 : (W - 360) / 2, cy = stretto ? (H - 200) / 2 + 60 : (H - 120) / 2;
+    const t = d3.zoomIdentity.translate(cx - k * p[0], cy - k * p[1]).scale(k);
+    d3.select(canvas).transition().duration(dur).ease(d3.easeCubicInOut).call(zoom.transform, t);
+  } else {
+    const r0 = rot.slice(), r1 = [-lon, clamp(-lat, -85, 85)];
+    if (r1[0] - r0[0] > 180) r0[0] += 360; if (r0[0] - r1[0] > 180) r0[0] -= 360;
+    const iR = d3.interpolate(r0, r1), k0 = globoK, k1 = clamp(k * 0.8, 1, 12);
+    const tm = d3.timer(el => {
+      const u = dur ? d3.easeCubicInOut(Math.min(1, el / dur)) : 1;
+      rot = iR(u); globoK = k0 + (k1 - k0) * u; disegna();
+      if (u >= 1) { tm.stop(); d3.select(canvas).call(zoom.transform, d3.zoomIdentity.scale(globoK)); }
+    });
+  }
+}
+
+/* ───────────────────────── Selezione e pannello ───────────────────────── */
+function seleziona(nome, { vola = false } = {}) {
+  S.sel = nome;
+  if (nome) S.pannelloAperto = true;
+  aggiornaPannello(); disegna();
+  if (vola && nome && S.istantanea) {
+    const membri = S.istantanea.feats.filter(f => f.n === nome || f.s === nome);
+    const top = membri.sort((a, b) => b.pxA - a.pxA)[0];
+    if (top && top.l) {
+      const tot = membri.reduce((t, f) => t + f.pxA, 0);
+      const k = clamp(Math.sqrt((W * H) / (tot * 16 + 1)), 1, 9);
+      volaA(top.l[0], top.l[1], k);
+    }
+  }
+}
+function serieDi(nome) {
+  const linea = Object.entries(LINEE).find(([, m]) => m.some(x => x.split(">")[0] === nome));
+  const membri = linea ? linea[1] : [nome];
+  const tot = new Map();
+  for (const m of membri) {
+    const [n, da] = m.split(">");
+    const ys = INDICE.entities[n]; if (!ys) continue;
+    for (const [y, a] of Object.entries(ys)) { const yy = +y; if (da && yy < +da) continue; tot.set(yy, (tot.get(yy) || 0) + a); }
+  }
+  const propria = INDICE.entities[nome] || {};
+  return { linea: linea ? linea[0] : null, membri, punti: ANNI.map(y => ({ y, a: tot.get(y), mia: propria[y] })) };
+}
+function aggiornaPannello() {
+  const p = $("#pannello");
+  p.dataset.chiuso = String(!S.pannelloAperto);
+  if (!S.istantanea) return;
+  if (S.sel) pannelloEntita(p); else pannelloMondo(p);
+}
+function pannelloMondo(p) {
+  const s = S.istantanea;
+  const grp = new Map();
+  for (const f of s.feats) {
+    if (!f.n || f.cult) continue;
+    const key = S.modo === "s" ? f.s : f.n;
+    grp.set(key, (grp.get(key) || 0) + f.a);
+  }
+  const top = [...grp.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10);
+  const max = top.length ? top[0][1] : 1;
+  const nStati = new Set(s.feats.filter(f => f.n && !f.cult).map(f => f.s)).size;
+  const nCult = s.feats.filter(f => f.cult).length;
+  const evs = EVENTI.filter(e => Math.abs(e[0] - S.anno) <= Math.max(60, Math.abs(S.anno) * 0.06) || istantaneaPer(e[0]) === s.anno).slice(0, 3);
+  const tab = S.modo === "s" ? INDICE.colorsS : INDICE.colorsN;
+  p.innerHTML = `
+    <div><div class="etichetta">Il mondo nel ${fmtAnno(s.anno)}</div>
+    <h2 style="margin-top:6px">${esc(eraDi(S.anno))}</h2></div>
+    <dl class="dati" style="margin:0">
+      <div><dt class="etichetta">${S.modo === "s" ? "Sovrani" : "Stati"}</dt><dd>${nStati}</dd></div>
+      <div><dt class="etichetta">Popoli e culture</dt><dd>${nCult}</dd></div>
+    </dl>
+    <div style="display:grid;gap:8px">
+      <h3>${S.modo === "s" ? "I dieci imperi più estesi" : "Le dieci entità più estese"}</h3>
+      <ol class="classifica">${top.map(([n, a], i) => {
+        const c = colori.tinte[n in tab ? tab[n] : hash(n) % 9];
+        return `<li><button data-sel="${esc(n)}"><span class="n">${i + 1}</span><span class="nome">${esc(nomeIt(n))}</span><span class="km">${fmtKm(a)} km²</span><span class="barra"><i style="width:${(a / max * 100).toFixed(1)}%;background:${c}"></i></span></button></li>`;
+      }).join("")}</ol>
+    </div>
+    ${evs.length ? `<div style="display:grid;gap:8px"><h3>In questo periodo</h3>${evs.map(e => `<p><b style="font-family:var(--f-ui);font-size:13px">${fmtAnno(e[0])}</b> · ${esc(e[1])}. <span style="color:var(--inchiostro-tenue)">${esc(e[2])}</span></p>`).join("")}</div>` : ""}
+    <div class="legenda">
+      <span><i style="background:${colori.tinte[0]}"></i>Stati, regni e imperi</span>
+      <span><i style="background:${colori.tinte[5]};opacity:.55"></i><em style="font-family:var(--f-testo)">Popoli e culture senza stato</em></span>
+      <span><i class="tratt"></i>Terre non documentate</span>
+    </div>
+    <p class="didascalia">Tocca un territorio per vederne la storia. I confini più antichi sono approssimati: ogni entità indica quanto sono precisi.</p>`;
+  const tr = p.querySelector(".tratt"); if (tr) { tr.style.background = colori.terra; tr.style.backgroundImage = `repeating-linear-gradient(135deg, transparent 0 3px, ${colori.filo} 3px 4px)`; }
+  p.querySelectorAll("[data-sel]").forEach(b => b.addEventListener("click", () => seleziona(b.dataset.sel, { vola: true })));
+}
+function pannelloEntita(p) {
+  const nome = S.sel, s = S.istantanea;
+  const membri = s.feats.filter(f => f.n === nome || f.s === nome);
+  const propria = s.byN.get(nome);
+  const area = membri.reduce((t, f) => t + f.a, 0);
+  const ys = Object.keys(INDICE.entities[nome] || {}).map(Number).sort((a, b) => a - b);
+  const serie = serieDi(nome);
+  const sovrano = propria && propria.s && propria.s !== nome ? propria.s : null;
+  const eredi = membri.length ? [] : [...new Set(serie.membri.map(m => m.split(">")[0]).filter(m => m !== nome && s.byN.has(m)))];
+  const dipendenti = membri.filter(f => f.n !== nome).length;
+  // posizione per estensione
+  const grp = new Map();
+  for (const f of s.feats) if (f.n && !f.cult) { const k = S.modo === "s" ? f.s : f.n; grp.set(k, (grp.get(k) || 0) + f.a); }
+  const ord = [...grp.entries()].sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  const pos = ord.indexOf(nome) + 1;
+  const prec = propria ? propria.p : null;
+  const precTesto = { 1: "approssimati", 2: "abbastanza precisi", 3: "precisi" }[prec] || "";
+  const wiki = `https://it.wikipedia.org/w/index.php?search=${encodeURIComponent(nomeIt(nome))}`;
+  p.innerHTML = `
+    <button class="indietro" id="indietro">← Il mondo nel ${fmtAnno(s.anno)}</button>
+    <div>
+      <div class="etichetta">${propria && propria.cult ? "Popolo o cultura" : "Entità politica"}</div>
+      <h2 style="margin-top:6px">${esc(nomeIt(nome))}</h2>
+      ${IT[nome] ? `<div class="originale">${esc(nome)}</div>` : ""}
+    </div>
+    ${membri.length ? `
+    <dl class="dati" style="margin:0">
+      <div><dt class="etichetta">Estensione</dt><dd>${fmtKm(area)} <small>km²</small></dd></div>
+      <div><dt class="etichetta">Posizione</dt><dd>${pos ? pos + "ª" : "—"} <small>per ampiezza</small></dd></div>
+      <div><dt class="etichetta">Attestata</dt><dd style="font-size:15px">${ys.length ? `${fmtAnno(ys[0])} – ${fmtAnno(ys[ys.length - 1])}` : "—"}</dd></div>
+      <div><dt class="etichetta">Confini</dt><dd style="font-size:15px">${prec ? `<span class="precisione" aria-label="precisione ${prec} su 3">${[1, 2, 3].map(i => `<i class="${i <= prec ? "on" : ""}"></i>`).join("")}</span> ${precTesto}` : "—"}</dd></div>
+    </dl>
+    ${sovrano ? `<p>Nel ${fmtAnno(s.anno)} è sotto il dominio di <button class="sovrano" data-sel="${esc(sovrano)}">${esc(nomeIt(sovrano))}</button>.</p>` : ""}
+    ${dipendenti ? `<p>Controlla ${dipendenti} ${dipendenti === 1 ? "territorio dipendente" : "territori dipendenti"}, compresi nell'estensione.</p>` : ""}
+    ` : `<div class="assente">Nel ${fmtAnno(s.anno)} questa entità non compare sulla carta. ${ys.length ? `È attestata dal ${fmtAnno(ys[0])} al ${fmtAnno(ys[ys.length - 1])}.` : ""}${eredi.length ? ` Sulla carta di quest'anno la stessa linea storica è ${eredi.map(n => `<button class="sovrano" data-sel="${esc(n)}">${esc(nomeIt(n))}</button>`).join(", ")}.` : ""}</div>`}
+    <div class="grafico">
+      <h3>Estensione nel tempo</h3>
+      <p class="didascalia" style="margin:4px 0 8px">${serie.linea ? `Linea storica «${esc(serie.linea)}»: ${[...new Set(serie.membri.map(m => m.split(">")[0]).filter(m => !m.includes("(") && INDICE.entities[m]).map(nomeIt))].map(esc).join(", ")}. La parte scura è ${esc(nomeIt(nome))}.` : "Superficie su ogni carta disponibile."} Tocca il grafico per spostarti nel tempo.</p>
+      <svg id="grafico" role="img" aria-label="Estensione in chilometri quadrati nel tempo"></svg>
+    </div>
+    <a class="link" href="${wiki}" target="_blank" rel="noopener">Leggi su Wikipedia ↗</a>`;
+  $("#indietro").addEventListener("click", () => seleziona(null));
+  p.querySelectorAll("[data-sel]").forEach(b => b.addEventListener("click", () => seleziona(b.dataset.sel, { vola: true })));
+  disegnaGrafico(serie);
+}
+function disegnaGrafico(serie) {
+  const svg = d3.select("#grafico"); const w = svg.node().clientWidth || 290, h = 150, m = { t: 10, r: 6, b: 20, l: 36 };
+  svg.attr("viewBox", `0 0 ${w} ${h}`);
+  const x = d3.scaleLinear().domain([0, 1]).range([m.l, w - m.r]);
+  const max = d3.max(serie.punti, d => d.a || 0) || 1;
+  const y = d3.scaleLinear().domain([0, max]).nice(3).range([h - m.b, m.t]);
+  const X = d => x(tScala(d.y));
+  const g = svg.append("g");
+  g.append("g").attr("class", "griglia").selectAll("line").data(y.ticks(3)).join("line").attr("x1", m.l).attr("x2", w - m.r).attr("y1", y).attr("y2", y);
+  g.append("g").attr("class", "asse").selectAll("text").data(y.ticks(3)).join("text").attr("x", m.l - 6).attr("y", d => y(d) + 3).attr("text-anchor", "end").text(d => d >= 1e6 ? (d / 1e6).toLocaleString("it-IT") + " mln" : d >= 1e3 ? (d / 1e3) + " k" : d);
+  g.append("g").attr("class", "asse").selectAll("text.x").data([-3000, 1, 1000, 2000]).join("text").attr("x", d => x(tScala(d))).attr("y", h - 4).attr("text-anchor", "middle").text(d => d < 0 ? `${-d} a.C.` : d === 1 ? "1 d.C." : d);
+  const area = d3.area().defined(d => d.a != null).curve(d3.curveStepAfter).x(X).y0(y(0)).y1(d => y(d.a));
+  g.append("path").datum(serie.punti).attr("d", area).attr("fill", colori.terracotta).attr("opacity", serie.linea ? 0.22 : 0.3);
+  if (serie.linea) {
+    const mia = d3.area().defined(d => d.mia != null).curve(d3.curveStepAfter).x(X).y0(y(0)).y1(d => y(d.mia));
+    g.append("path").datum(serie.punti).attr("d", mia).attr("fill", colori.terracotta).attr("opacity", 0.55);
+  }
+  g.append("path").datum(serie.punti).attr("d", d3.line().defined(d => d.a != null).curve(d3.curveStepAfter).x(X).y(d => y(d.a))).attr("fill", "none").attr("stroke", colori.terracotta).attr("stroke-width", 1.5);
+  const cx = x(tScala(S.anno));
+  g.append("line").attr("x1", cx).attr("x2", cx).attr("y1", m.t - 4).attr("y2", h - m.b).attr("stroke", colori.inchiostro).attr("stroke-width", 1);
+  const cur = serie.punti.find(d => d.y === S.istantanea.anno);
+  if (cur && cur.a != null) g.append("circle").attr("cx", X(cur)).attr("cy", y(cur.a)).attr("r", 3.5).attr("fill", colori.terracotta).attr("stroke", colori.carta).attr("stroke-width", 1.5);
+  svg.on("click", ev => {
+    const [px] = d3.pointer(ev);
+    const yr = tScala.invert(x.invert(px));
+    impostaAnno(yr);
+  }).style("cursor", "pointer");
+}
+
+/* ───────────────────────── Linea del tempo ───────────────────────── */
+let linea = null;
+function creaLinea() {
+  const box = $("#linea");
+  const svg = d3.select(box).append("svg");
+  const gEre = svg.append("g"), gTacche = svg.append("g"), gScia = svg.append("rect").attr("class", "scia"), gSnap = svg.append("g"), gEv = svg.append("g"), gCur = svg.append("g").attr("class", "cursore");
+  gCur.append("line"); gCur.append("rect").attr("rx", 3); gCur.append("text").attr("text-anchor", "middle");
+  let w = 0, h = 0, x = null;
+  const Y_ERE = 4, H_ERE = 20;
+  function ridisegna() {
+    w = box.clientWidth; h = box.clientHeight;
+    svg.attr("viewBox", `0 0 ${w} ${h}`);
+    x = v => 6 + tScala(v) * (w - 12);
+    const asse = h - 30;
+    gEre.selectAll("*").remove();
+    ERE.forEach((e, i) => {
+      const x0 = x(e[0]), x1 = x(e[1]);
+      gEre.append("rect").attr("class", "era-banda" + (i % 2 ? " alt" : "")).attr("x", x0).attr("y", Y_ERE).attr("width", Math.max(0, x1 - x0 - 1)).attr("height", H_ERE).attr("rx", 3);
+      const t = gEre.append("text").attr("class", "era-nome").attr("x", x0 + 6).attr("y", Y_ERE + 14).text(e[2]);
+      if (t.node().getComputedTextLength() > x1 - x0 - 10) t.remove();
+    });
+    const tacche = w < 420 ? [-3000, 1, 1000, 1500, 2000] : w < 600 ? [-3000, -1000, 1, 1000, 1500, 1800, 2000] : [-3000, -2000, -1000, -500, 1, 500, 1000, 1250, 1500, 1650, 1800, 1900, 2000];
+    gTacche.selectAll("*").remove();
+    for (const t of tacche) {
+      const g = gTacche.append("g").attr("class", "tacca");
+      g.append("line").attr("x1", x(t)).attr("x2", x(t)).attr("y1", asse - 3).attr("y2", asse + 3);
+      g.append("text").attr("x", x(t)).attr("y", asse + 17).attr("text-anchor", "middle").text(t < 0 ? `${-t} a.C.` : t === 1 ? "1 d.C." : t);
+    }
+    gTacche.append("line").attr("x1", x(-3000)).attr("x2", x(2010)).attr("y1", asse).attr("y2", asse).attr("stroke", colori.filo || "#d9cbb4");
+    gSnap.selectAll("*").remove();
+    gSnap.selectAll("circle").data(ANNI).join("circle").attr("class", "istantanea").attr("cx", d => x(d)).attr("cy", asse).attr("r", 2.2);
+    gEv.selectAll("*").remove();
+    const ev = gEv.selectAll("g").data(EVENTI).join("g").attr("class", "evento").attr("transform", d => `translate(${x(d[0])},${asse - 10})`);
+    ev.append("path").attr("d", "M0,-5 L4,0 L0,5 L-4,0 Z");
+    ev.append("rect").attr("x", -7).attr("y", -9).attr("width", 14).attr("height", 18).attr("fill", "transparent");
+    ev.append("title").text(d => `${fmtAnno(d[0])} · ${d[1]}`);
+    ev.on("pointerdown", ev => ev.stopPropagation()).on("click", (ev, d) => { ev.stopPropagation(); vaiEvento(d); });
+    cursore();
+  }
+  function cursore() {
+    if (!x) return;
+    const asse = h - 30, cx = x(S.anno);
+    gCur.select("line").attr("x1", cx).attr("x2", cx).attr("y1", Y_ERE).attr("y2", asse + 6);
+    const testo = fmtAnno(S.anno);
+    const tw = testo.length * 6.6 + 12;
+    const rx = clamp(cx - tw / 2, 0, w - tw);
+    gCur.select("rect").attr("x", rx).attr("y", Y_ERE + H_ERE + 2).attr("width", tw).attr("height", 17);
+    gCur.select("text").attr("x", rx + tw / 2).attr("y", Y_ERE + H_ERE + 14).text(testo);
+    gSnap.selectAll("circle").attr("class", d => "istantanea" + (S.istantanea && d === S.istantanea.anno ? " corrente" : "")).attr("r", d => S.istantanea && d === S.istantanea.anno ? 4 : 2.2);
+    if (S.istantanea) {
+      const i = ANNI.indexOf(S.istantanea.anno), fine = ANNI[i + 1] != null ? ANNI[i + 1] : 2010;
+      gScia.attr("x", x(S.istantanea.anno)).attr("width", Math.max(0, x(fine) - x(S.istantanea.anno))).attr("y", Y_ERE).attr("height", asse - Y_ERE);
+    }
+  }
+  const annoDa = px => tScala.invert(clamp((px - 6) / (w - 12), 0, 1));
+  let trascina = false;
+  svg.on("pointerdown", ev => { trascina = true; svg.node().setPointerCapture(ev.pointerId); fermaTour(); impostaAnno(annoDa(d3.pointer(ev)[0])); })
+    .on("pointermove", ev => { if (trascina) impostaAnno(annoDa(d3.pointer(ev)[0])); })
+    .on("pointerup pointercancel", () => { trascina = false; });
+  box.addEventListener("keydown", ev => {
+    const i = ANNI.indexOf(istantaneaPer(S.anno));
+    if (ev.key === "ArrowRight") { ev.preventDefault(); impostaAnno(ANNI[Math.min(ANNI.length - 1, i + 1)]); }
+    else if (ev.key === "ArrowLeft") { ev.preventDefault(); impostaAnno(S.anno > ANNI[i] ? ANNI[i] : ANNI[Math.max(0, i - 1)]); }
+    else if (ev.key === "Home") { ev.preventDefault(); impostaAnno(-3000); }
+    else if (ev.key === "End") { ev.preventDefault(); impostaAnno(2010); }
+  });
+  return { ridisegna, cursore };
+}
+
+/* ───────────────────────── Riproduzione ───────────────────────── */
+const VEL = [0.5, 1, 2, 4];
+let ultimoTick = 0;
+function tick(now) {
+  if (!S.play) return;
+  const dt = Math.min(0.1, (now - ultimoTick) / 1000); ultimoTick = now;
+  const u = tScala(S.anno) + dt * S.vel / 70; // 70 s per attraversare tutta la storia a 1×
+  if (u >= 1) { impostaAnno(2010); suona(false); return; }
+  impostaAnno(tScala.invert(u));
+  requestAnimationFrame(tick);
+}
+function suona(on) {
+  S.play = on;
+  $("#play").innerHTML = on ? '<svg viewBox="0 0 20 20"><path d="M5 3h3.5v14H5zM11.5 3H15v14h-3.5z"/></svg>' : '<svg viewBox="0 0 20 20"><path d="M5 3l12 7-12 7z"/></svg>';
+  $("#play").setAttribute("aria-label", on ? "Ferma lo scorrere del tempo" : "Avvia lo scorrere del tempo");
+  if (on) { if (S.anno >= 2010) impostaAnno(-3000, { animare: false }); ultimoTick = performance.now(); requestAnimationFrame(tick); }
+}
+
+/* ───────────────────────── Visita guidata ───────────────────────── */
+const TAPPE = EVENTI.filter(e => e[4]);
+let tourTimer = null;
+function vaiEvento(e) {
+  suona(false);
+  impostaAnno(e[0]);
+  if (e[3]) volaA(e[3][0], e[3][1], e[3][2]);
+}
+function mostraTappa(i) {
+  const e = TAPPE[i]; S.tour = i;
+  vaiEvento(e);
+  seleziona(null);
+  const r = $("#racconto");
+  r.hidden = false;
+  r.innerHTML = `<div class="etichetta">${fmtAnno(e[0])} · Tappa ${i + 1} di ${TAPPE.length}</div>
+    <h3>${esc(e[1])}</h3><p>${esc(e[2])}</p>
+    <div class="avanzamento"><i></i></div>
+    <div class="piede">
+      <button class="bottone" id="t-esci">Esci dalla visita</button>
+      <span style="display:flex;gap:8px">
+        <button class="bottone" id="t-prec" ${i === 0 ? "disabled" : ""}>Indietro</button>
+        <button class="bottone pieno" id="t-succ">${i === TAPPE.length - 1 ? "Fine" : "Avanti"}</button>
+      </span>
+    </div>`;
+  r.style.animation = "none"; void r.offsetWidth; r.style.animation = "";
+  $("#t-esci").onclick = fermaTour;
+  $("#t-prec").onclick = () => mostraTappa(i - 1);
+  $("#t-succ").onclick = () => i === TAPPE.length - 1 ? fermaTour() : mostraTappa(i + 1);
+  const barra = r.querySelector(".avanzamento i");
+  clearTimeout(tourTimer);
+  const durata = 11000;
+  if (!riduciMoto) { barra.style.transition = "none"; barra.style.width = "0"; requestAnimationFrame(() => { barra.style.transition = `width ${durata}ms linear`; barra.style.width = "100%"; }); }
+  tourTimer = setTimeout(() => { if (S.tour === i && i < TAPPE.length - 1) mostraTappa(i + 1); }, durata);
+}
+function fermaTour() { if (S.tour == null) return; S.tour = null; clearTimeout(tourTimer); $("#racconto").hidden = true; }
+
+/* ───────────────────────── Ricerca ───────────────────────── */
+function creaRicerca() {
+  const input = $("#cerca"), box = $("#risultati");
+  const voci = Object.keys(INDICE.entities).map(n => {
+    const ys = Object.keys(INDICE.entities[n]).map(Number).sort((a, b) => a - b);
+    const max = Math.max(...Object.values(INDICE.entities[n]));
+    return { n, it: nomeIt(n), ys, max, chiave: (n + " " + nomeIt(n)).toLowerCase() };
+  });
+  let attivi = [], idx = 0;
+  const mostra = () => {
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 2) { box.hidden = true; return; }
+    attivi = voci.filter(v => v.chiave.includes(q)).sort((a, b) => (b.it.toLowerCase().startsWith(q) - a.it.toLowerCase().startsWith(q)) || b.max - a.max).slice(0, 8);
+    idx = 0;
+    box.innerHTML = attivi.length ? attivi.map((v, i) => `<button role="option" data-i="${i}" class="${i === 0 ? "attivo" : ""}"><b>${esc(v.it)}</b><small>${fmtAnno(v.ys[0])} – ${fmtAnno(v.ys[v.ys.length - 1])} · fino a ${fmtKm(v.max)} km²</small></button>`).join("") : `<p class="didascalia" style="padding:8px 12px;margin:0">Nessuna entità con questo nome. Prova in inglese: i nomi originali vengono dal dataset.</p>`;
+    box.hidden = false;
+    box.querySelectorAll("button").forEach(b => b.addEventListener("click", () => scegli(attivi[+b.dataset.i])));
+  };
+  const scegli = v => {
+    if (!v) return;
+    box.hidden = true; input.value = v.it; input.blur();
+    fermaTour(); suona(false);
+    const presente = v.ys.includes(istantaneaPer(S.anno));
+    const anno = presente ? S.anno : v.ys.reduce((b, y) => INDICE.entities[v.n][y] > INDICE.entities[v.n][b] ? y : b, v.ys[0]);
+    impostaAnno(anno).then(() => seleziona(v.n, { vola: true }));
+    if (presente) seleziona(v.n, { vola: true });
+  };
+  input.addEventListener("input", mostra);
+  input.addEventListener("keydown", ev => {
+    if (box.hidden) return;
+    const bs = box.querySelectorAll("button");
+    if (ev.key === "ArrowDown" || ev.key === "ArrowUp") { ev.preventDefault(); idx = clamp(idx + (ev.key === "ArrowDown" ? 1 : -1), 0, bs.length - 1); bs.forEach((b, i) => b.classList.toggle("attivo", i === idx)); }
+    else if (ev.key === "Enter") { ev.preventDefault(); scegli(attivi[idx]); }
+    else if (ev.key === "Escape") { box.hidden = true; }
+  });
+  document.addEventListener("click", ev => { if (!ev.target.closest(".cerca")) box.hidden = true; });
+}
+
+/* ───────────────────────── Comandi ───────────────────────── */
+function premi(attivo, altro) { attivo.setAttribute("aria-pressed", "true"); altro.setAttribute("aria-pressed", "false"); }
+function impostaProiezione(p) {
+  S.proj = p; salva("proj", p);
+  premi($(p === "piano" ? "#p-piano" : "#p-globo"), $(p === "piano" ? "#p-globo" : "#p-piano"));
+  S.anim = null; vista = d3.zoomIdentity; globoK = 1; ultimaT = d3.zoomIdentity;
+  zoom.scaleExtent(p === "piano" ? [1, 40] : [0.8, 14]);
+  d3.select(canvas).call(zoom.transform, d3.zoomIdentity);
+  disegna();
+}
+function impostaModo(m) {
+  S.modo = m; salva("modo", m);
+  premi($(m === "s" ? "#c-sovrani" : "#c-stati"), $(m === "s" ? "#c-stati" : "#c-sovrani"));
+  aggiornaPannello(); disegna();
+}
+function temaCorrente() { return document.documentElement.dataset.theme || (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"); }
+function aggiornaTema() {
+  leggiColori();
+  $("#b-tema").textContent = temaCorrente() === "dark" ? "Carta" : "Notte";
+  aggiornaPannello(); disegna(); if (linea) linea.ridisegna();
+}
+$("#p-piano").onclick = () => impostaProiezione("piano");
+$("#p-globo").onclick = () => impostaProiezione("globo");
+$("#c-sovrani").onclick = () => impostaModo("s");
+$("#c-stati").onclick = () => impostaModo("n");
+$("#b-etichette").onclick = ev => { S.nomi = !S.nomi; ev.currentTarget.setAttribute("aria-pressed", String(S.nomi)); ev.currentTarget.style.opacity = S.nomi ? 1 : .6; disegna(); };
+$("#b-tema").onclick = () => { const t = temaCorrente() === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = t; salva("tema", t); aggiornaTema(); };
+$("#b-visita").onclick = () => { suona(false); mostraTappa(0); };
+$("#apri-pannello").onclick = () => { S.pannelloAperto = !S.pannelloAperto; aggiornaPannello(); };
+$("#play").onclick = () => { fermaTour(); suona(!S.play); };
+$("#velocita").onclick = ev => { S.vel = VEL[(VEL.indexOf(S.vel) + 1) % VEL.length]; ev.currentTarget.textContent = String(S.vel).replace(".", ",") + "×"; };
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", aggiornaTema);
+document.addEventListener("keydown", ev => {
+  if (ev.target.closest("input")) return;
+  if (ev.key === " " && !ev.target.closest("button")) { ev.preventDefault(); fermaTour(); suona(!S.play); }
+  if (ev.key === "Escape") { fermaTour(); if (S.sel) seleziona(null); }
+});
+window.addEventListener("resize", () => { clearTimeout(window._rz); window._rz = setTimeout(ridimensiona, 80); });
+window.addEventListener("hashchange", () => { const y = annoDaHash(); if (y != null && y !== S.anno) impostaAnno(y); });
+
+/* ───────────────────────── Avvio ───────────────────────── */
+(async function avvia() {
+  const t = leggi("tema"); if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+  leggiColori();
+  $("#b-tema").textContent = temaCorrente() === "dark" ? "Carta" : "Notte";
+  if (W < 860 && innerWidth >= 860) S.pannelloAperto = true;
+  S.pannelloAperto = innerWidth >= 860;
+  try {
+    INDICE = await fetch("data/index.json").then(r => r.json());
+  } catch (e) {
+    $("#caricamento").textContent = "Non riesco a caricare le carte. Ricarica la pagina per riprovare.";
+    return;
+  }
+  ANNI = INDICE.years.slice().sort((a, b) => a - b);
+  try {
+    const t50 = await fetch("data/terra-50.json").then(r => r.json());
+    TERRA.g50 = topojson.merge(t50, Object.values(t50.objects)[0].geometries);
+  } catch (e) {}
+  linea = creaLinea();
+  ridimensiona();
+  creaRicerca();
+  const m = leggi("modo"); if (m === "n") impostaModo("n");
+  const p = leggi("proj"); if (p === "globo") impostaProiezione("globo");
+  const y0 = annoDaHash();
+  await impostaAnno(y0 != null ? y0 : 1279, { animare: false });
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => { disegna(); linea.ridisegna(); });
+})();
+</script>
