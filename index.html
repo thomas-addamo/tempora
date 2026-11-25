@@ -67,6 +67,16 @@ button, input { font: inherit; color: inherit; }
 .anno { display: flex; align-items: baseline; gap: 10px; margin-top: var(--s2); }
 .anno strong { font: 800 64px/0.9 var(--f-display); letter-spacing: -0.045em; font-variant-numeric: tabular-nums; }
 .anno em { font: 600 16px var(--f-display); font-style: normal; color: var(--terracotta); }
+.anno-btn { all: unset; display: flex; align-items: baseline; gap: 10px; cursor: text; border-radius: var(--r-md); }
+.anno-btn strong { text-decoration: underline dotted transparent; text-decoration-thickness: 3px; text-underline-offset: 6px; transition: text-decoration-color .15s; }
+.anno-btn:hover strong, .anno-btn:focus-visible strong { text-decoration-color: var(--terracotta); }
+.anno-btn:focus-visible { outline: 2px solid var(--terracotta); outline-offset: 4px; }
+#anno-form { display: flex; align-items: center; gap: var(--s2); }
+#anno-input { width: 7.2ch; min-width: 0; font: 800 44px/1 var(--f-display); letter-spacing: -0.035em; color: var(--inchiostro); background: transparent; border: 0; border-bottom: 2px solid var(--terracotta); padding: 2px 0 4px; outline: none; }
+#anno-input::placeholder { color: var(--filo); font-weight: 700; }
+#anno-form .bottone { height: 34px; flex: none; }
+#anno-msg { font-size: 12px; line-height: 16px; color: var(--terracotta); }
+#anno-msg:empty { display: none; }
 .era { font: italic 400 16px/22px var(--f-testo); color: var(--inchiostro-tenue); }
 .mappa-di { margin-top: var(--s1); }
 
@@ -178,6 +188,8 @@ button, input { font: inherit; color: inherit; }
 @media (max-width: 860px) {
   #testata { min-width: 0; padding: 12px 16px; right: auto; }
   .anno strong { font-size: 44px; }
+  #anno-input { font-size: 34px; }
+  #testata:has(#anno-form:not([hidden])) ~ #fonte { visibility: hidden; } /* mentre si scrive l'anno, la testata si allarga */
   .marchio span, .mappa-di { display: none; }
   #strumenti { top: auto; bottom: calc(env(safe-area-inset-bottom, 0px) + 128px); right: calc(env(safe-area-inset-right, 0px) + var(--s3)); left: calc(env(safe-area-inset-left, 0px) + var(--s3)); max-width: none; justify-content: flex-start; }
   .cerca { width: 100%; order: -1; }
@@ -199,7 +211,15 @@ button, input { font: inherit; color: inherit; }
 
   <header id="testata" class="lastra">
     <div class="marchio"><b>Tempora<i>.</i></b><span>atlante storico del mondo</span></div>
-    <div class="anno" aria-live="polite"><strong id="anno-num">1279</strong><em id="anno-era">d.C.</em></div>
+    <div class="anno">
+      <button class="anno-btn" id="anno-btn" type="button" title="Scrivi un anno" aria-describedby="anno-aiuto"><strong id="anno-num" aria-live="polite">1279</strong><em id="anno-era">d.C.</em></button>
+      <form id="anno-form" hidden>
+        <input id="anno-input" type="text" inputmode="text" enterkeyhint="go" autocomplete="off" spellcheck="false" placeholder="1492" aria-label="Scrivi un anno, per esempio 1492 o 500 a.C.">
+        <button class="bottone pieno" type="submit">Vai</button>
+      </form>
+    </div>
+    <div id="anno-msg" role="status"></div>
+    <span id="anno-aiuto" hidden>Premi per scrivere un anno, per esempio 1492 o 500 a.C.</span>
     <div class="era" id="era-nome">Basso Medioevo</div>
     <div class="etichetta mappa-di" id="mappa-di">Confini del 1279</div>
   </header>
@@ -236,7 +256,7 @@ button, input { font: inherit; color: inherit; }
       <button id="play" aria-label="Avvia lo scorrere del tempo"><svg viewBox="0 0 20 20"><path d="M5 3l12 7-12 7z"/></svg></button>
       <button id="velocita" aria-label="Velocità di riproduzione">1×</button>
     </div>
-    <div id="linea" tabindex="0" role="slider" aria-label="Anno" aria-valuemin="-3000" aria-valuemax="2010" aria-valuenow="1279"></div>
+    <div id="linea" tabindex="0" role="slider" aria-label="Anno" aria-valuemin="-3000" aria-valuemax="2019" aria-valuenow="1279"></div>
   </section>
 
   <div id="suggerimento" class="lastra" hidden></div>
@@ -284,7 +304,7 @@ const LINEE = {
 const ERE = [
   [-3000, -1200, "Età del bronzo"], [-1200, -500, "Età del ferro"], [-500, 476, "Età classica"],
   [476, 1000, "Alto Medioevo"], [1000, 1492, "Basso Medioevo"], [1492, 1789, "Età moderna"],
-  [1789, 1914, "Ottocento"], [1914, 2010, "Novecento"]
+  [1789, 1914, "Ottocento"], [1914, 2019, "Novecento"]
 ];
 // [anno, titolo, testo, [lon, lat, zoom], nel tour]
 const EVENTI = [
@@ -325,6 +345,7 @@ const RE_CULTURE = /hunter|gatherer|nomad|tribes|tribal|pastoral|cultures?\b|peo
 const $ = s => document.querySelector(s);
 const nomeIt = n => IT[n] || (INDICE && INDICE.it && INDICE.it[n]) || n;
 const fmtAnno = y => y < 0 ? `${-y} a.C.` : `${y} d.C.`;
+const ANNO_MIN = -3000, ANNO_MAX = 2019; // dalla prima all'ultima carta disponibile
 const fmtKm = a => a >= 1e6 ? `${(a / 1e6).toLocaleString("it-IT", { maximumFractionDigits: 2 })} mln` : Math.round(a).toLocaleString("it-IT");
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const riduciMoto = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -335,7 +356,7 @@ function salva(k, v) { try { localStorage.setItem("tempora:" + k, v); } catch (e
 function leggi(k) { try { return localStorage.getItem("tempora:" + k); } catch (e) { return null; } }
 
 /* Scala del tempo non lineare: le epoche recenti, più ricche di mappe, hanno più spazio */
-const T_DOM = [-3000, -1000, -500, 1, 500, 1000, 1500, 1800, 1900, 2010];
+const T_DOM = [-3000, -1000, -500, 1, 500, 1000, 1500, 1800, 1900, ANNO_MAX];
 const T_RNG = [0, .1, .17, .27, .37, .48, .62, .78, .88, 1];
 const tScala = d3.scaleLinear().domain(T_DOM).range(T_RNG).clamp(true);
 
@@ -936,7 +957,7 @@ function avviaTransizione(da, a) {
 /* ───────────────────────── Cambio d'anno ───────────────────────── */
 let richiestaAnno = 0;
 async function impostaAnno(y, { animare = true } = {}) {
-  S.anno = Math.round(clamp(y, -3000, 2010));
+  S.anno = Math.round(clamp(y, ANNO_MIN, ANNO_MAX));
   if (S.anno === 0) S.anno = 1;
   aggiornaTestata();
   if (linea) linea.cursore();
@@ -1242,7 +1263,7 @@ function creaLinea() {
       g.append("line").attr("x1", x(t)).attr("x2", x(t)).attr("y1", asse - 3).attr("y2", asse + 3);
       g.append("text").attr("x", x(t)).attr("y", asse + 17).attr("text-anchor", "middle").text(t < 0 ? `${-t} a.C.` : t === 1 ? "1 d.C." : t);
     }
-    gTacche.append("line").attr("x1", x(-3000)).attr("x2", x(2010)).attr("y1", asse).attr("y2", asse).attr("stroke", colori.filo || "#d9cbb4");
+    gTacche.append("line").attr("x1", x(ANNO_MIN)).attr("x2", x(ANNO_MAX)).attr("y1", asse).attr("y2", asse).attr("stroke", colori.filo || "#d9cbb4");
     gSnap.selectAll("*").remove();
     gSnap.selectAll("circle").data(ANNI).join("circle").attr("class", "istantanea").attr("cx", d => x(d)).attr("cy", asse).attr("r", 2.2);
     gEv.selectAll("*").remove();
@@ -1264,7 +1285,7 @@ function creaLinea() {
     gCur.select("text").attr("x", rx + tw / 2).attr("y", Y_ERE + H_ERE + 14).text(testo);
     gSnap.selectAll("circle").attr("class", d => "istantanea" + (S.istantanea && d === S.istantanea.anno ? " corrente" : "")).attr("r", d => S.istantanea && d === S.istantanea.anno ? 4 : 2.2);
     if (S.istantanea) {
-      const i = ANNI.indexOf(S.istantanea.anno), fine = ANNI[i + 1] != null ? ANNI[i + 1] : 2010;
+      const i = ANNI.indexOf(S.istantanea.anno), fine = ANNI[i + 1] != null ? ANNI[i + 1] : ANNO_MAX;
       gScia.attr("x", x(S.istantanea.anno)).attr("width", Math.max(0, x(fine) - x(S.istantanea.anno))).attr("y", Y_ERE).attr("height", asse - Y_ERE);
     }
   }
@@ -1278,7 +1299,7 @@ function creaLinea() {
     if (ev.key === "ArrowRight") { ev.preventDefault(); impostaAnno(ANNI[Math.min(ANNI.length - 1, i + 1)]); }
     else if (ev.key === "ArrowLeft") { ev.preventDefault(); impostaAnno(S.anno > ANNI[i] ? ANNI[i] : ANNI[Math.max(0, i - 1)]); }
     else if (ev.key === "Home") { ev.preventDefault(); impostaAnno(-3000); }
-    else if (ev.key === "End") { ev.preventDefault(); impostaAnno(2010); }
+    else if (ev.key === "End") { ev.preventDefault(); impostaAnno(ANNO_MAX); }
   });
   return { ridisegna, cursore };
 }
@@ -1290,7 +1311,7 @@ function tick(now) {
   if (!S.play) return;
   const dt = Math.min(0.1, (now - ultimoTick) / 1000); ultimoTick = now;
   const u = tScala(S.anno) + dt * S.vel / 70; // 70 s per attraversare tutta la storia a 1×
-  if (u >= 1) { impostaAnno(2010); suona(false); return; }
+  if (u >= 1) { impostaAnno(ANNO_MAX); suona(false); return; }
   impostaAnno(tScala.invert(u));
   requestAnimationFrame(tick);
 }
@@ -1298,7 +1319,7 @@ function suona(on) {
   S.play = on;
   $("#play").innerHTML = on ? '<svg viewBox="0 0 20 20"><path d="M5 3h3.5v14H5zM11.5 3H15v14h-3.5z"/></svg>' : '<svg viewBox="0 0 20 20"><path d="M5 3l12 7-12 7z"/></svg>';
   $("#play").setAttribute("aria-label", on ? "Ferma lo scorrere del tempo" : "Avvia lo scorrere del tempo");
-  if (on) { if (S.anno >= 2010) impostaAnno(-3000, { animare: false }); ultimoTick = performance.now(); requestAnimationFrame(tick); }
+  if (on) { if (S.anno >= ANNO_MAX) impostaAnno(ANNO_MIN, { animare: false }); ultimoTick = performance.now(); requestAnimationFrame(tick); }
 }
 
 /* ───────────────────────── Visita guidata ───────────────────────── */
@@ -1407,6 +1428,41 @@ $("#apri-pannello").onclick = () => { S.pannelloAperto = !S.pannelloAperto; aggi
 $("#play").onclick = () => { fermaTour(); suona(!S.play); };
 $("#velocita").onclick = ev => { S.vel = VEL[(VEL.indexOf(S.vel) + 1) % VEL.length]; ev.currentTarget.textContent = String(S.vel).replace(".", ",") + "×"; };
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", aggiornaTema);
+/* Anno scritto a mano: "1492", "500 a.C.", "-500", "44 ac", "1200 d.C." */
+function leggiAnno(testo) {
+  const t = testo.trim().toLowerCase().replace(/\s+/g, " ");
+  const m = t.match(/(-|−)?\s*(\d{1,4})/);
+  if (!m) return null;
+  let y = Number(m[2]);
+  if (m[1] || /a\.?\s?c\b|a\.?\s?c\.|\bbce?\b|\bb\.c|avanti/.test(t)) y = -y;
+  return y === 0 ? 1 : y;
+}
+const annoBtn = $("#anno-btn"), annoForm = $("#anno-form"), annoIn = $("#anno-input"), annoMsg = $("#anno-msg");
+function apriAnno(iniziale) {
+  annoBtn.hidden = true; annoForm.hidden = false; annoMsg.textContent = "";
+  annoIn.value = iniziale != null ? iniziale : (S.anno < 0 ? `${-S.anno} a.C.` : String(S.anno));
+  annoIn.focus();
+  if (iniziale == null) annoIn.select(); else annoIn.setSelectionRange(annoIn.value.length, annoIn.value.length);
+}
+function chiudiAnno(rifocalizza) { annoForm.hidden = true; annoBtn.hidden = false; if (rifocalizza) annoBtn.focus(); }
+annoBtn.onclick = () => apriAnno();
+annoForm.onsubmit = ev => {
+  ev.preventDefault();
+  const y = leggiAnno(annoIn.value);
+  if (y == null) { annoMsg.textContent = "Scrivi un anno, per esempio 1492 o 500 a.C."; annoIn.focus(); return; }
+  if (y < ANNO_MIN || y > ANNO_MAX) { annoMsg.textContent = `Le carte vanno dal ${fmtAnno(ANNO_MIN)} al ${ANNO_MAX}.`; annoIn.focus(); annoIn.select(); return; }
+  annoMsg.textContent = "";
+  fermaTour();
+  chiudiAnno(true);
+  impostaAnno(y);
+};
+annoIn.addEventListener("keydown", ev => { if (ev.key === "Escape") { ev.preventDefault(); ev.stopPropagation(); annoMsg.textContent = ""; chiudiAnno(true); } });
+annoIn.addEventListener("input", () => { annoMsg.textContent = ""; });
+annoForm.addEventListener("focusout", () => setTimeout(() => { if (!annoForm.hidden && !annoForm.contains(document.activeElement)) { annoMsg.textContent = ""; chiudiAnno(false); } }, 150));
+document.addEventListener("keydown", ev => {
+  // basta cominciare a scrivere un numero per saltare a quell'anno
+  if (/^[0-9]$/.test(ev.key) && !ev.metaKey && !ev.ctrlKey && !ev.altKey && annoForm.hidden && !ev.target.closest("input, textarea, [contenteditable]")) { ev.preventDefault(); apriAnno(ev.key); return; }
+});
 document.addEventListener("keydown", ev => {
   if (ev.target.closest("input")) return;
   if (ev.key === " " && !ev.target.closest("button")) { ev.preventDefault(); fermaTour(); suona(!S.play); }
