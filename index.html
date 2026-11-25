@@ -349,12 +349,14 @@ const cache = new Map();   // anno -> istantanea
 const inCorso = new Map(); // anno -> promise
 
 /* ───────────────────────── Canvas e proiezioni ───────────────────────── */
-const canvas = $("#map"), ctx = canvas.getContext("2d");
+const canvas = $("#map");
+let ctx = canvas.getContext("2d");
 const hitCtx = document.createElement("canvas").getContext("2d");
 let W = 0, H = 0, DPR = 1;
 const SFERA = { type: "Sphere" };
 const GRATICOLA = d3.geoGraticule10();
 let base = d3.geoEqualEarth();
+let baseDati = d3.geoEqualEarth().precision(0); // stessa proiezione senza ricampionamento: i dati sono già fitti
 const globo = d3.geoOrthographic().clipAngle(90).precision(0.4);
 let vista = d3.zoomIdentity, globoK = 1, rot = [-30, -25], ultimaT = d3.zoomIdentity;
 let percorsoSfera = null, percorsoGraticola = null;
@@ -389,6 +391,7 @@ function ridimensiona() {
   const stretto = W < 860;
   const padT = stretto ? 120 : 40, padB = stretto ? 200 : 140, padL = stretto ? 8 : 24, padR = stretto ? 8 : 380;
   base = d3.geoEqualEarth().fitExtent([[padL, padT], [W - padR, H - padB]], SFERA);
+  baseDati = d3.geoEqualEarth().scale(base.scale()).translate(base.translate()).precision(0);
   const gR = Math.min(W - padL - padR, H - padT - padB) / 2;
   globo.scale(gR).translate([padL + (W - padL - padR) / 2, padT + (H - padT - padB) / 2]);
   globo._r = gR;
@@ -420,24 +423,45 @@ function costruisciLivello(t, dest) {
   };
   return dest;
 }
-function caricaAnno(y) {
+/* Le carte precaricate si preparano a piccoli passi nei momenti liberi, per non bloccare animazioni e gesti;
+   quella che serve subito si prepara tutta in una volta. */
+const libero = window.requestIdleCallback ? fn => requestIdleCallback(fn, { timeout: 200 }) : fn => setTimeout(fn, 16);
+function esegui(passi, stato) {
+  return new Promise(fatto => {
+    const passo = scadenza => {
+      const fine = performance.now() + (scadenza && scadenza.timeRemaining ? clamp(scadenza.timeRemaining(), 4, 12) : 6);
+      while (!passi.next().done) if (!stato.urgente && performance.now() > fine) { libero(passo); return; }
+      fatto();
+    };
+    if (stato.urgente) passo(); else libero(passo);
+  });
+}
+const statiCarico = new Map(); // anno -> { urgente }
+function caricaAnno(y, urgente = true) {
   if (cache.has(y)) return Promise.resolve(cache.get(y));
-  if (inCorso.has(y)) return inCorso.get(y);
-  const p = fetch(`data/${y}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(t => {
+  if (inCorso.has(y)) { if (urgente) statiCarico.get(y).urgente = true; return inCorso.get(y); }
+  const stato = { urgente };
+  statiCarico.set(y, stato);
+  const p = fetch(`data/${y}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).then(async t => {
     const s = costruisciLivello(t, { anno: y, hd: null, hdP: null });
-    preparaPiano(s);
-    cache.set(y, s); inCorso.delete(y);
+    const b = base;
+    await esegui(passiPiano(s), stato);
+    if (b !== base) preparaPiano(s); // la finestra è cambiata nel frattempo
+    cache.set(y, s); inCorso.delete(y); statiCarico.delete(y);
     if (usaHD()) caricaHD(s);
     return s;
   });
+  p.catch(() => { inCorso.delete(y); statiCarico.delete(y); });
   inCorso.set(y, p);
   return p;
 }
 function caricaHD(s) {
   if (!s || s.hdP) return;
-  s.hdP = fetch(`data/${s.anno}-hd.json`).then(r => r.json()).then(t => {
-    s.hd = costruisciLivello(t, {});
-    preparaLivello(s.hd, false);
+  s.hdP = fetch(`data/${s.anno}-hd.json`).then(r => r.json()).then(async t => {
+    const hd = costruisciLivello(t, {}), b = base;
+    await esegui(passiLivello(hd, false, TOL_HD), { urgente: false });
+    if (b !== base) preparaLivello(hd, false, TOL_HD);
+    s.hd = hd;
     disegna();
   }).catch(() => { s.hdP = null; });
   if (!TERRA.hdP) TERRA.hdP = fetch("data/terra-10.json").then(r => r.json()).then(t => {
@@ -447,26 +471,93 @@ function caricaHD(s) {
 }
 const usaHD = () => S.proj === "piano" ? vista.k >= 3 : globoK >= 2.6;
 const livello = s => (usaHD() && s.hd) ? s.hd : s;
+/* Prestazioni: i punti più vicini di una frazione di pixel non si vedono ma costano.
+   Le tracce in proiezione piana li scartano (tolleranza in pixel della carta a zoom 1). */
+const TOL_LEGGERO = 0.3, TOL_HD = 0.02;
+function tracciaDecimata(geo, tol) {
+  const g = geo && geo.type === "Feature" ? geo.geometry : geo;
+  if (!g) return new Path2D();
+  // le geometrie multiple si tracciano un pezzo alla volta e poi si uniscono:
+  // aggiungere migliaia di isole allo stesso tracciato costa fino a 7 volte di più
+  const pezzi = g.type === "MultiPolygon" ? g.coordinates.map(c => ({ type: "Polygon", coordinates: c }))
+    : g.type === "MultiLineString" ? g.coordinates.map(c => ({ type: "LineString", coordinates: c })) : null;
+  if (pezzi && pezzi.length > 1) { const p = new Path2D(); for (const q of pezzi) p.addPath(tracciaPezzo(q, tol)); return p; }
+  return tracciaPezzo(g, tol);
+}
+function tracciaPezzo(g, tol) {
+  const p = new Path2D();
+  let lx = 0, ly = 0, qx = 0, qy = 0, sospeso = false;
+  const chiudi = () => { if (sospeso) { p.lineTo(qx, qy); sospeso = false; } };
+  d3.geoPath(baseDati, {
+    moveTo(x, y) { chiudi(); p.moveTo(x, y); lx = x; ly = y; },
+    lineTo(x, y) {
+      if (Math.abs(x - lx) < tol && Math.abs(y - ly) < tol) { qx = x; qy = y; sospeso = true; return; }
+      p.lineTo(x, y); lx = x; ly = y; sospeso = false;
+    },
+    closePath() { chiudi(); p.closePath(); },
+    arc() {}
+  })(g);
+  chiudi();
+  return p;
+}
+/* Per il globo la decimazione è in gradi e si calcola una volta sola per livello di dettaglio. */
+function semplificaGeo(g, tol) {
+  if (!g) return g;
+  const linea = (r, min) => {
+    if (r.length <= min) return r;
+    const o = [r[0]]; let l = r[0];
+    for (let i = 1; i < r.length - 1; i++) { const q = r[i]; if (Math.abs(q[0] - l[0]) > tol || Math.abs(q[1] - l[1]) > tol) { o.push(q); l = q; } }
+    o.push(r[r.length - 1]);
+    return o.length >= min ? o : null;
+  };
+  // su una sfera un anello semplificato che si attorciglia cambia verso e racchiude il resto del mondo:
+  // in quel caso si tiene l'anello originale
+  const capovolto = (a, b) => (d3.geoArea({ type: "Polygon", coordinates: [a] }) > 2 * Math.PI) !== (d3.geoArea({ type: "Polygon", coordinates: [b] }) > 2 * Math.PI);
+  const poligono = rs => {
+    const out = [];
+    for (let i = 0; i < rs.length; i++) {
+      let r = linea(rs[i], 4);
+      if (r && r !== rs[i] && capovolto(r, rs[i])) r = rs[i];
+      if (r) out.push(r); else if (i === 0) return null;
+    }
+    return out;
+  };
+  switch (g.type) {
+    case "Feature": return { type: "Feature", properties: g.properties, geometry: semplificaGeo(g.geometry, tol) };
+    case "Polygon": { const c = poligono(g.coordinates); return c ? { type: "Polygon", coordinates: c } : null; }
+    case "MultiPolygon": return { type: "MultiPolygon", coordinates: g.coordinates.map(poligono).filter(Boolean) };
+    case "LineString": { const c = linea(g.coordinates, 2); return c ? { type: "LineString", coordinates: c } : null; }
+    case "MultiLineString": return { type: "MultiLineString", coordinates: g.coordinates.map(r => linea(r, 2)).filter(Boolean) };
+    default: return g;
+  }
+}
+const geoA = (o, chiave, tol) => { const k = "_" + chiave + "@" + tol; if (!o[k]) o[k] = semplificaGeo(o[chiave], tol) || { type: "Polygon", coordinates: [] }; return o[k]; };
 function preparaTerra() {
-  for (const k of ["50", "10"]) {
-    const g = TERRA["g" + k]; if (!g) continue;
-    const p = new Path2D(); d3.geoPath(base, p)(g); TERRA["p" + k] = p;
-  }
+  if (TERRA.g50) TERRA.p50 = tracciaDecimata(TERRA.g50, TOL_LEGGERO);
+  if (TERRA.g10) TERRA.p10 = tracciaDecimata(TERRA.g10, TOL_HD);
 }
-function preparaLivello(liv, conEtichette) {
-  const gp = d3.geoPath(base);
+function* passiLivello(liv, conEtichette, tol) {
+  const gp = d3.geoPath(baseDati);
   for (const f of liv.feats) {
-    f.path = new Path2D(); d3.geoPath(base, f.path)(f.geo);
-    if (conEtichette) { f.pxA = gp.area(f.geo); f.anello = null; f.lp = f.l ? base(f.l) : null; }
+    f.path = tracciaDecimata(f.geo, tol);
+    if (conEtichette) {
+      const g = f.geo.geometry;
+      f.pxA = g && g.type === "MultiPolygon" ? g.coordinates.reduce((t, c) => t + gp.area({ type: "Polygon", coordinates: c }), 0) : gp.area(f.geo);
+      f.anello = null; f.lp = f.l ? base(f.l) : null;
+    }
+    yield;
   }
-  liv.p2 = {};
-  for (const k in liv.mesh) { const p = new Path2D(); d3.geoPath(base, p)(liv.mesh[k]); liv.p2[k] = p; }
+  const p2 = {};
+  for (const k in liv.mesh) { p2[k] = tracciaDecimata(liv.mesh[k], tol); yield; }
+  liv.p2 = p2;
 }
-function preparaPiano(s) {
-  preparaLivello(s, true);
-  if (s.hd) preparaLivello(s.hd, false);
+function* passiPiano(s) {
+  yield* passiLivello(s, true, TOL_LEGGERO);
+  if (s.hd) yield* passiLivello(s.hd, false, TOL_HD);
   s.etichette = null;
 }
+function preparaLivello(liv, conEtichette, tol) { for (const _ of passiLivello(liv, conEtichette, tol)); }
+function preparaPiano(s) { for (const _ of passiPiano(s)); }
 const istantaneaPer = y => { let r = ANNI[0]; for (const a of ANNI) if (a <= y) r = a; return r; };
 
 /* ───────────────────────── Colori delle entità ───────────────────────── */
@@ -480,11 +571,51 @@ function riempimento(f) {
 const evidenziato = f => S.sel && (f.n === S.sel || f.s === S.sel);
 
 /* ───────────────────────── Disegno ───────────────────────── */
-let richiesto = false;
-function disegna() { if (!richiesto) { richiesto = true; requestAnimationFrame(frame); } }
+/* La carta piana viene disegnata per intero solo quando cambia qualcosa; durante pan e zoom
+   si sposta e si scala l'ultima immagine (con sotto il mondo intero), poi si ridisegna nitida a gesto finito. */
+let richiesto = false, modoRichiesto = 0, versione = 0, interagendo = false, timerQuiete = 0;
+const quadro = { c: document.createElement("canvas"), v: null, ver: -1 };
+const panorama = { c: document.createElement("canvas"), ver: -1 };
+function richiedi(m) { if (m > modoRichiesto) modoRichiesto = m; if (!richiesto) { richiesto = true; requestAnimationFrame(frame); } }
+function disegna() { versione++; richiedi(2); }
+const ridisegnaVista = () => richiedi(2);
+const disegnaVeloce = () => richiedi(1);
+function adatta(c) { if (c.width !== canvas.width || c.height !== canvas.height) { c.width = canvas.width; c.height = canvas.height; } }
+function incolla(c, v0) {
+  const r = vista.k / v0.k;
+  ctx.setTransform(r, 0, 0, r, DPR * (vista.x - r * v0.x), DPR * (vista.y - r * v0.y));
+  ctx.drawImage(c, 0, 0);
+}
+function componi() {
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = colori.carta; ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const v0 = quadro.v;
+  if (vista.k !== v0.k || vista.x !== v0.x || vista.y !== v0.y) {
+    if (panorama.ver !== versione) {
+      adatta(panorama.c);
+      const c0 = ctx, vv = vista;
+      ctx = panorama.c.getContext("2d"); vista = d3.zoomIdentity;
+      ctx.setTransform(DPR, 0, 0, DPR, 0, 0); ctx.fillStyle = colori.carta; ctx.fillRect(0, 0, W, H);
+      disegnaPiano(1);
+      ctx = c0; vista = vv; panorama.ver = versione;
+    }
+    incolla(panorama.c, d3.zoomIdentity);
+  }
+  incolla(quadro.c, v0);
+  disegnaHover();
+}
+function disegnaHover() {
+  if (!S.hover || S.anim || S.proj !== "piano") return;
+  const h = livello(S.istantanea).byN.get(S.hover.n) || S.hover, k = vista.k;
+  ctx.setTransform(DPR * k, 0, 0, DPR * k, DPR * vista.x, DPR * vista.y);
+  ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = 1.8 / k; ctx.lineJoin = "round"; ctx.stroke(h.path);
+}
 function frame(now) {
   richiesto = false;
-  if (!S.istantanea || !colori.tinte) return;
+  const m = modoRichiesto; modoRichiesto = 0;
+  if (!S.istantanea || !colori.tinte || !W || !H || !canvas.width || !canvas.height) return; // finestra nascosta o a dimensione zero
+  const piano = S.proj === "piano";
+  if (piano && m === 1 && !S.anim && quadro.v && quadro.ver === versione) { componi(); return; }
   let e = 1;
   if (S.anim) {
     e = clamp((now - S.anim.t0) / S.anim.dur, 0, 1);
@@ -493,20 +624,69 @@ function frame(now) {
   }
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   ctx.fillStyle = colori.carta; ctx.fillRect(0, 0, W, H);
-  if (S.proj === "piano") disegnaPiano(e); else disegnaGlobo(e);
+  if (!piano) {
+    // mentre si trascina il globo si disegna a risoluzione 1× e si ingrandisce: quattro volte meno pixel
+    if (interagendo && DPR > 1) {
+      const d0 = DPR, c0 = ctx;
+      if (globoBasso.width !== W || globoBasso.height !== H) { globoBasso.width = W; globoBasso.height = H; }
+      DPR = 1; ctx = globoBasso.getContext("2d");
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = colori.carta; ctx.fillRect(0, 0, W, H);
+      disegnaGlobo(e);
+      ctx = c0; DPR = d0;
+      ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.drawImage(globoBasso, 0, 0, canvas.width, canvas.height);
+    } else disegnaGlobo(e);
+    return;
+  }
+  disegnaPiano(e);
+  if (S.anim) return; // durante il morphing l'immagine in cache non serve
+  adatta(quadro.c);
+  const q = quadro.c.getContext("2d"); q.setTransform(1, 0, 0, 1, 0, 0); q.drawImage(canvas, 0, 0);
+  quadro.v = vista; quadro.ver = versione;
+  disegnaHover();
+}
+
+/* Strati fissi della carta piana: mare e tratteggio della terra, maschera della terra, costa.
+   Dipendono solo da vista, dimensioni e tema: si ridisegnano quando questi cambiano, non a ogni fotogramma. */
+/* Le linee larghe al massimo ~1,6 pixel fisici si tracciano larghe esattamente un pixel:
+   il motore grafico le disegna con un percorso dedicato, fino a 20 volte più veloce. */
+const sottile = (css, k = 1) => (css * DPR <= 1.6 ? 1 / DPR : css) / k;
+const strati = { chiave: "", sfondo: document.createElement("canvas"), maschera: document.createElement("canvas"), costa: document.createElement("canvas"), ent: document.createElement("canvas") };
+function preparaStrati(terra) {
+  const k = vista.k;
+  const chiave = [k, vista.x, vista.y, canvas.width, canvas.height, colori.carta, terra === TERRA.p10 ? 10 : 50].join("|");
+  if (strati.chiave === chiave && strati.terra === terra) return;
+  strati.chiave = chiave; strati.terra = terra;
+  const T = [DPR * k, 0, 0, DPR * k, DPR * vista.x, DPR * vista.y];
+  const sf = strati.sfondo, ms = strati.maschera, co = strati.costa;
+  [sf, ms, co].forEach(adatta);
+  let g = sf.getContext("2d");
+  g.setTransform(1, 0, 0, 1, 0, 0); g.fillStyle = colori.carta; g.fillRect(0, 0, sf.width, sf.height);
+  g.setTransform(...T);
+  g.fillStyle = colori.mare; g.fill(percorsoSfera);
+  g.strokeStyle = colori.mareFilo; g.lineWidth = sottile(0.6, k); g.stroke(percorsoGraticola);
+  colori.tratteggio.setTransform(new DOMMatrix().scale(1 / k));
+  g.fillStyle = colori.tratteggio; g.fill(terra);   // terra vera, tratteggiata dove nessuno la governa
+  g = ms.getContext("2d");
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, ms.width, ms.height);
+  g.setTransform(...T); g.fillStyle = "#000"; g.fill(terra);
+  g = co.getContext("2d");
+  g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, co.width, co.height);
+  g.setTransform(...T); g.lineJoin = "bevel";
+  g.strokeStyle = colori.tenue; g.lineWidth = sottile(0.7, k); g.stroke(terra);
+  g.lineWidth = 1 / k; g.stroke(percorsoSfera);
 }
 
 function disegnaPiano(e) {
   const k = vista.k, nuova = S.istantanea, vecchia = S.anim ? S.anim.da : null;
   const LN = livello(nuova), LV = vecchia ? livello(vecchia) : null;
   const terra = (k >= 3 && TERRA.p10) ? TERRA.p10 : TERRA.p50;
+  preparaStrati(terra);
+  // i territori si disegnano su uno strato a parte, poi vengono ritagliati sulla costa con la maschera
+  const principale = ctx;
+  adatta(strati.ent);
+  ctx = strati.ent.getContext("2d");
+  ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, strati.ent.width, strati.ent.height);
   ctx.setTransform(DPR * k, 0, 0, DPR * k, DPR * vista.x, DPR * vista.y);
-  ctx.fillStyle = colori.mare; ctx.fill(percorsoSfera);
-  ctx.strokeStyle = colori.mareFilo; ctx.lineWidth = 0.6 / k; ctx.stroke(percorsoGraticola);
-  colori.tratteggio.setTransform(new DOMMatrix().scale(1 / k));
-  // terra vera, tratteggiata dove nessuno la governa
-  ctx.fillStyle = colori.tratteggio; ctx.fill(terra);
-  ctx.save(); ctx.clip(terra);
 
   const morph = S.anim ? S.anim.morph : null;
   if (LV) {
@@ -532,21 +712,21 @@ function disegnaPiano(e) {
       ctx.closePath();
       ctx.globalAlpha = m.f.cult ? 0.55 : 1;
       ctx.fillStyle = riempimento(m.f); ctx.fill();
-      ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = 0.9 / k; ctx.globalAlpha = 0.55; ctx.stroke();
+      ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = sottile(0.9, k); ctx.globalAlpha = 0.55; ctx.stroke();
       ctx.globalAlpha = e * 0.9; ctx.fillStyle = riempimento(m.f); ctx.fill(m.f.path);
       if (m.v) { ctx.globalAlpha = (1 - e) * 0.9; ctx.fillStyle = riempimento(m.v); ctx.fill(m.v.path); }
       ctx.globalAlpha = 1;
     }
   }
-  // confini interni (la costa è disegnata a parte)
+  // confini interni (la costa è uno strato a parte)
   const larg = clamp(0.55 + Math.log2(k) * 0.18, 0.55, 1.4);
   const disegnaConfini = (s, a) => {
-    ctx.strokeStyle = colori.inchiostro; ctx.lineJoin = "round";
+    ctx.strokeStyle = colori.inchiostro; ctx.lineJoin = "bevel";
     if (S.modo === "s") {
-      ctx.globalAlpha = a * 0.3; ctx.lineWidth = larg * 0.6 / k; ctx.setLineDash([2.5 / k, 2 / k]); ctx.stroke(s.p2.sInterni); ctx.setLineDash([]);
-      ctx.globalAlpha = a * 0.8; ctx.lineWidth = larg / k; ctx.stroke(s.p2.s);
+      ctx.globalAlpha = a * 0.3; ctx.lineWidth = sottile(larg * 0.6, k); ctx.setLineDash([2.5 / k, 2 / k]); ctx.stroke(s.p2.sInterni); ctx.setLineDash([]);
+      ctx.globalAlpha = a * 0.8; ctx.lineWidth = sottile(larg, k); ctx.stroke(s.p2.s);
     } else {
-      ctx.globalAlpha = a * 0.7; ctx.lineWidth = larg * 0.85 / k; ctx.stroke(s.p2.n);
+      ctx.globalAlpha = a * 0.7; ctx.lineWidth = sottile(larg * 0.85, k); ctx.stroke(s.p2.n);
     }
     ctx.globalAlpha = 1;
   };
@@ -557,49 +737,115 @@ function disegnaPiano(e) {
     const sel = LN.feats.filter(evidenziato);
     ctx.fillStyle = colori.carta; ctx.globalAlpha = colori.scuro ? 0.55 : 0.5; ctx.fill(percorsoSfera); ctx.globalAlpha = 1;
     for (const f of sel) { ctx.fillStyle = riempimento(f); ctx.fill(f.path); }
-    ctx.strokeStyle = colori.terracotta; ctx.lineWidth = 2.4 / k;
+    ctx.strokeStyle = colori.terracotta; ctx.lineWidth = 2.4 / k; ctx.lineJoin = "round";
     for (const f of sel) ctx.stroke(f.path);
   }
-  if (S.hover && !S.anim) { const h = LN.byN.get(S.hover.n) || S.hover; ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = 1.8 / k; ctx.stroke(h.path); }
-  ctx.restore();
-  // costa precisa
-  ctx.strokeStyle = colori.tenue; ctx.lineWidth = 0.7 / k; ctx.lineJoin = "round"; ctx.stroke(terra);
-  ctx.strokeStyle = colori.tenue; ctx.lineWidth = 1 / k; ctx.stroke(percorsoSfera);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.globalCompositeOperation = "destination-in"; ctx.drawImage(strati.maschera, 0, 0);
+  ctx.globalCompositeOperation = "source-over";
+  ctx = principale;
 
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.drawImage(strati.sfondo, 0, 0);
+  ctx.drawImage(strati.ent, 0, 0);
+  ctx.drawImage(strati.costa, 0, 0);
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   if (S.nomi) disegnaEtichette(nuova, vecchia ? e : 1, f => f.lp ? [f.lp[0] * k + vista.x, f.lp[1] * k + vista.y] : null, k * k);
 }
 
+/* Globo: si proiettano solo le parti rivolte verso chi guarda, con un dettaglio proporzionato allo zoom. */
+const TOLLERANZE = [0.6, 0.3, 0.15, 0.08, 0.04, 0.02, 0.01];
+const tollPer = gradi => TOLLERANZE.find(t => t <= gradi) || 0.01;
+function cerchioDi(g) {
+  // centro e raggio angolare di una geometria, per scartare in fretta ciò che sta dietro la sfera
+  if (g._cc) return g._cc;
+  const c = d3.geoCentroid(g); let r = 0;
+  if (!isFinite(c[0]) || !isFinite(c[1])) return (g._cc = { c: [0, 0], r: 4 }); // geometria vuota o degenere: sempre visibile
+  const coords = g.type === "Polygon" || g.type === "MultiLineString" ? [g.coordinates] : g.type === "MultiPolygon" ? g.coordinates : g.type === "LineString" ? [[g.coordinates]] : [];
+  for (const parte of coords) for (const anello of parte) {
+    const passo = Math.max(1, anello.length >> 7);
+    for (let i = 0; i < anello.length; i += passo) { const d = d3.geoDistance(c, anello[i]); if (d > r) r = d; }
+  }
+  return (g._cc = { c, r: r + 0.03 });
+}
+function parti(o, chiave) {
+  // spezza una geometria multipla in pezzi singoli, ognuno col proprio cerchio
+  const k = "_parti_" + chiave;
+  if (o[k]) return o[k];
+  const g = o[chiave].type === "Feature" ? o[chiave].geometry : o[chiave];
+  const tipo = g.type === "MultiPolygon" ? "Polygon" : g.type === "MultiLineString" ? "LineString" : null;
+  const lista = tipo ? g.coordinates.map(c => ({ g: { type: tipo, coordinates: c } })) : [{ g }];
+  for (const p of lista) p.cc = cerchioDi(geoA(p, "g", 0.3));
+  return (o[k] = lista);
+}
+function tracciaGlobo(path2d, o, chiave, tol, centro, ang) {
+  for (const p of parti(o, chiave)) if (d3.geoDistance(p.cc.c, centro) - p.cc.r < ang) { const q = new Path2D(); d3.geoPath(globo, q)(geoA(p, "g", tol)); path2d.addPath(q); }
+}
+
+const globoLiscio = d3.geoOrthographic().clipAngle(90).precision(0.5); // per sfera e reticolo, che hanno lati lunghi
+const cacheGlobo = { chiave: "" }, globoBasso = document.createElement("canvas");
 function disegnaGlobo(e) {
-  globo.scale(globo._r * globoK).rotate(rot);
-  const gp = d3.geoPath(globo, ctx);
-  const terra = (globoK >= 2.6 && TERRA.g10) ? TERRA.g10 : TERRA.g50;
-  ctx.beginPath(); gp(SFERA); ctx.fillStyle = colori.mare; ctx.fill();
-  ctx.beginPath(); gp(GRATICOLA); ctx.strokeStyle = colori.mareFilo; ctx.lineWidth = 0.6; ctx.stroke();
+  const R = globo._r * globoK;
+  // i dati sono già densi: niente ricampionamento adattivo, che costava più della proiezione stessa
+  globo.scale(R).rotate(rot).precision(0);
+  globoLiscio.scale(R).rotate(rot).translate(globo.translate());
+  const centro = [-rot[0], -rot[1]];
+  // angolo visibile: l'emisfero, o meno se lo zoom fa uscire il globo dallo schermo
+  const ang = Math.min(Math.PI / 2, Math.asin(Math.min(1, (Math.hypot(W, H) / 2 + 160) / R))) + 0.03;
+  // un grado vale circa R·π/180 pixel: si tengono i punti distanti almeno ~0.7 px (2.5 px mentre si trascina)
+  const pxGrado = R * Math.PI / 180;
+  const tol = tollPer((interagendo ? 2.5 : 0.7) / pxGrado);
+  const hd = globoK >= 2.6 && !interagendo; // l'alta definizione solo da fermi
+  // le proiezioni si riusano finché la vista non cambia (animazioni tra anni, passaggio del mouse)
+  const chiave = [rot[0], rot[1], R, tol, hd && !!TERRA.g10, W, H, DPR].join("|");
+  const C = cacheGlobo;
+  if (C.chiave !== chiave) {
+    C.chiave = chiave; C.n = (C.n || 0) + 1;
+    C.sfera = new Path2D(); d3.geoPath(globoLiscio, C.sfera)(SFERA);
+    C.grat = new Path2D(); d3.geoPath(globoLiscio, C.grat)(GRATICOLA);
+    C.terra = new Path2D();
+    if (hd && TERRA.g10) tracciaGlobo(C.terra, TERRA, "g10", tol, centro, ang); else tracciaGlobo(C.terra, TERRA, "g50", Math.max(tol, 0.04), centro, ang);
+  }
+  const pSfera = C.sfera, pTerra = C.terra;
+  ctx.fillStyle = colori.mare; ctx.fill(pSfera);
+  if (!interagendo) { ctx.strokeStyle = colori.mareFilo; ctx.lineWidth = sottile(0.6); ctx.stroke(C.grat); }
   colori.tratteggio.setTransform(new DOMMatrix());
-  ctx.beginPath(); gp(terra); ctx.fillStyle = colori.tratteggio; ctx.fill();
-  ctx.save(); ctx.clip();
+  ctx.fillStyle = colori.tratteggio; ctx.fill(pTerra);
+  ctx.save(); ctx.clip(pTerra);
+  const visibile = f => { const cc = f._ccF || (f._ccF = cerchioDi(geoA(f, "geo", 0.3).geometry || f.geo.geometry)); return d3.geoDistance(cc.c, centro) - cc.r < ang; };
+  const traccia = f => {
+    if (f._gk !== C.n) {
+      f._gk = C.n; f._gp = new Path2D();
+      const g = geoA(f, "geo", tol).geometry;
+      if (g && g.type === "MultiPolygon") for (const c of g.coordinates) { const q = new Path2D(); d3.geoPath(globo, q)({ type: "Polygon", coordinates: c }); f._gp.addPath(q); }
+      else if (g) d3.geoPath(globo, f._gp)(g);
+    }
+    return f._gp;
+  };
   const strato = (s, alpha) => {
     for (const f of s.feats) {
-      ctx.beginPath(); gp(f.geo);
+      if (!visibile(f)) continue;
       ctx.globalAlpha = alpha * (f.cult ? 0.55 : 1);
-      ctx.fillStyle = riempimento(f); ctx.fill();
+      ctx.fillStyle = riempimento(f); ctx.fill(traccia(f));
     }
-    ctx.beginPath(); gp(S.modo === "s" ? s.mesh.s : s.mesh.n); ctx.strokeStyle = colori.inchiostro; ctx.globalAlpha = alpha * 0.75; ctx.lineWidth = 0.8; ctx.stroke();
+    const mk = S.modo + C.n;
+    if (s._mk !== mk) { s._mk = mk; s._pm = new Path2D(); tracciaGlobo(s._pm, s.mesh, S.modo === "s" ? "s" : "n", tol, centro, ang); }
+    const pm = s._pm;
+    ctx.strokeStyle = colori.inchiostro; ctx.globalAlpha = alpha * 0.75; ctx.lineWidth = sottile(0.8); ctx.lineJoin = "bevel"; ctx.stroke(pm);
     ctx.globalAlpha = 1;
   };
-  const nuova = S.istantanea, LN = livello(nuova);
-  if (S.anim) { strato(livello(S.anim.da), 1); strato(LN, e); } else strato(LN, 1);
+  const liv = s => hd ? livello(s) : s;
+  const nuova = S.istantanea, LN = liv(nuova);
+  if (S.anim) { strato(liv(S.anim.da), 1); strato(LN, e); } else strato(LN, 1);
   if (S.sel && !S.anim) {
-    ctx.strokeStyle = colori.terracotta; ctx.lineWidth = 2.4;
-    for (const f of LN.feats) if (evidenziato(f)) { ctx.beginPath(); gp(f.geo); ctx.stroke(); }
+    ctx.strokeStyle = colori.terracotta; ctx.lineWidth = 2.4; ctx.lineJoin = "round";
+    for (const f of LN.feats) if (evidenziato(f) && visibile(f)) ctx.stroke(traccia(f));
   }
-  if (S.hover && !S.anim) { const h = LN.byN.get(S.hover.n) || S.hover; ctx.beginPath(); gp(h.geo); ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = 1.8; ctx.stroke(); }
+  if (S.hover && !S.anim) { const h = LN.byN.get(S.hover.n) || S.hover; ctx.strokeStyle = colori.inchiostro; ctx.lineWidth = 1.8; ctx.stroke(traccia(h)); }
   ctx.restore();
-  ctx.beginPath(); gp(terra); ctx.strokeStyle = colori.tenue; ctx.lineWidth = 0.7; ctx.stroke();
-  ctx.beginPath(); gp(SFERA); ctx.strokeStyle = colori.tenue; ctx.lineWidth = 1; ctx.stroke();
-  const centro = [-rot[0], -rot[1]];
-  const k2 = Math.pow(globo._r * globoK / base.scale(), 2);
+  ctx.strokeStyle = colori.tenue; ctx.lineWidth = sottile(0.7); ctx.lineJoin = "bevel"; ctx.stroke(pTerra);
+  ctx.lineWidth = 1; ctx.stroke(pSfera);
+  const k2 = Math.pow(R / base.scale(), 2);
   if (S.nomi) disegnaEtichette(nuova, S.anim ? e : 1, f => (f.l && d3.geoDistance(f.l, centro) < 1.2) ? globo(f.l) : null, k2);
 }
 
@@ -710,7 +956,7 @@ async function impostaAnno(y, { animare = true } = {}) {
   aggiornaHash();
   // precarico le carte vicine
   const i = ANNI.indexOf(snap);
-  [ANNI[i + 1], ANNI[i - 1], ANNI[i + 2]].forEach(a => a != null && caricaAnno(a).catch(() => {}));
+  setTimeout(() => [ANNI[i + 1], ANNI[i - 1], ANNI[i + 2]].forEach(a => a != null && caricaAnno(a, false).catch(() => {})), 300);
 }
 function aggiornaTestata() {
   const y = S.anno;
@@ -750,7 +996,10 @@ const zoom = d3.zoom().scaleExtent([1, 40]).on("start", () => canvas.classList.a
   ultimaT = t;
   if (usaHD() && S.istantanea) caricaHD(S.istantanea);
   nascondiSuggerimento();
-  disegna();
+  if (!ev.sourceEvent && S.proj === "piano") { ridisegnaVista(); return; } // voli programmati: sempre nitidi
+  interagendo = true; disegnaVeloce();
+  clearTimeout(timerQuiete);
+  timerQuiete = setTimeout(() => { interagendo = false; ridisegnaVista(); }, S.proj === "piano" ? 140 : 90);
 });
 d3.select(canvas).call(zoom).on("dblclick.zoom", null);
 
@@ -762,8 +1011,14 @@ function entitaIn(px, py) {
     for (let i = s.feats.length - 1; i >= 0; i--) { const f = s.feats[i]; if (f.n && hitCtx.isPointInPath(f.path, x, y)) return f; }
   } else {
     const ll = globo.invert([px, py]); if (!ll || d3.geoDistance(ll, [-rot[0], -rot[1]]) > Math.PI / 2) return null;
-    if (TERRA.g50 && !d3.geoContains(TERRA.g50, ll)) return null;
-    for (let i = s.feats.length - 1; i >= 0; i--) { const f = s.feats[i]; if (f.n && d3.geoContains(f.geo, ll)) return f; }
+    if (TERRA.g50 && !d3.geoContains(geoA(TERRA, "g50", 0.08), ll)) return null;
+    for (let i = s.feats.length - 1; i >= 0; i--) {
+      const f = s.feats[i]; if (!f.n) continue;
+      const b = f.bb || (f.bb = d3.geoBounds(f.geo));
+      if (ll[1] < b[0][1] || ll[1] > b[1][1]) continue;
+      if (b[0][0] <= b[1][0] ? (ll[0] < b[0][0] || ll[0] > b[1][0]) : (ll[0] < b[0][0] && ll[0] > b[1][0])) continue;
+      if (d3.geoContains(geoA(f, "geo", 0.08), ll)) return f;
+    }
   }
   return null;
 }
@@ -775,7 +1030,7 @@ canvas.addEventListener("pointermove", ev => {
   const now = performance.now(); if (now - ultimoMove < 30) return; ultimoMove = now;
   const r = canvas.getBoundingClientRect();
   const f = entitaIn(ev.clientX - r.left, ev.clientY - r.top);
-  if (f !== S.hover) { S.hover = f; disegna(); }
+  if (f !== S.hover) { S.hover = f; disegnaVeloce(); }
   if (f) {
     const sovrano = f.s && f.s !== f.n ? `<small>sotto ${esc(nomeIt(f.s))}</small>` : "";
     sugg.innerHTML = `<b>${esc(nomeIt(f.n))}</b>${sovrano}<small>${fmtKm(f.a)} km²</small>`;
@@ -783,7 +1038,7 @@ canvas.addEventListener("pointermove", ev => {
     sugg.hidden = false; canvas.style.cursor = "pointer";
   } else { nascondiSuggerimento(); canvas.style.cursor = ""; }
 });
-canvas.addEventListener("pointerleave", () => { S.hover = null; nascondiSuggerimento(); disegna(); });
+canvas.addEventListener("pointerleave", () => { if (!S.hover) return; S.hover = null; nascondiSuggerimento(); disegnaVeloce(); });
 let giu = null;
 canvas.addEventListener("pointerdown", ev => { giu = [ev.clientX, ev.clientY]; });
 canvas.addEventListener("click", ev => {
@@ -808,7 +1063,7 @@ function volaA(lon, lat, k, dur = 1500) {
     const iR = d3.interpolate(r0, r1), k0 = globoK, k1 = clamp(k * 0.8, 1, 12);
     const tm = d3.timer(el => {
       const u = dur ? d3.easeCubicInOut(Math.min(1, el / dur)) : 1;
-      rot = iR(u); globoK = k0 + (k1 - k0) * u; disegna();
+      rot = iR(u); globoK = k0 + (k1 - k0) * u; interagendo = u < 1; disegna();
       if (u >= 1) { tm.stop(); d3.select(canvas).call(zoom.transform, d3.zoomIdentity.scale(globoK)); }
     });
   }
